@@ -1,0 +1,6 @@
+node_modules/
+.runtime/
+.data/
+config/local.json
+*.xcuserstate
+xcuserdata/

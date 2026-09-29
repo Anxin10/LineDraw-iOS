@@ -1,0 +1,27 @@
+{
+  "name": "linedraw-ios-wda",
+  "version": "1.0.0-alpha",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "setup": "bash scripts/setup.sh",
+    "appium": "bash scripts/appium.sh",
+    "doctor": "node scripts/doctor.mjs",
+    "open:wda": "bash scripts/open-wda.sh"
+  },
+  "dependencies": {
+    "appium": "3.8.0",
+    "cheerio": "1.1.2",
+    "fast-xml-parser": "5.11.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  },
+  "license": "PolyForm-Noncommercial-1.0.0"
+}

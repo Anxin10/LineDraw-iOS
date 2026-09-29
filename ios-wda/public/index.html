@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LineDraw · Mac 輔助程式</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<main>
+  <header><div><p class="eyebrow">BEYBLADE HUNTER · IOS LAB</p><h1>讓抽選，接續發生。</h1><p class="muted">Mac 控制 iPhone · 原生 App 輔助程式 1.0.0-alpha</p></div><span id="connection" class="pill">尚未連線</span></header>
+  <div class="notice">個人技術測試版：需要 Mac、USB 與已登入 LINE 的 iPhone。iPhone 原生版無需登入或 VIP；由配對 Mac 執行自動化。</div>
+  <div class="layout">
+    <section class="glass setup"><h2><span class="step">01</span>連接你的 iPhone</h2>
+      <p class="muted">手機解鎖、信任這部 Mac，並開啟開發者模式。第一次需設定 WDA 簽署。</p>
+      <button id="devices" class="secondary">尋找已連接的 iPhone</button><div id="device-list"></div>
+      <label>裝置 UDID<input id="udid" autocomplete="off" placeholder="接上 USB 後按上方按鈕"></label>
+      <label>LINE 紀錄設定檔<input id="profile" value="default" maxlength="80"><small>同一手機換 LINE 帳號時，請換設定檔名稱。</small></label>
+      <details open><summary>WDA 啟動設定</summary>
+        <label>啟動方式<select id="mode"><option value="xcode">Xcode 建置並啟動（首次建議）</option><option value="attach">連接已啟動的 WDA</option><option value="preinstalled">啟動預先安裝的 WDA（進階）</option></select></label>
+        <label>Apple Team ID<input id="team" maxlength="10" placeholder="10 碼；在 Xcode 簽署過可留空"></label>
+        <label>WDA Bundle ID<input id="bundle" value="com.beybladehunter.linedraw.WebDriverAgentRunner" placeholder="使用你的唯一 Bundle ID"></label>
+        <label>iOS 版本<input id="version" placeholder="例如 26.0；可由裝置偵測取得"></label>
+        <label>已啟動 WDA 位址<input id="wda-url" value="http://127.0.0.1:8105"></label>
+      </details>
+      <label class="check"><input type="checkbox" id="ocr">啟用 Vision OCR 備援（實驗）</label>
+      <p class="small muted">只在原生標籤不足時辨識畫面；僅操作底部已知文字。截圖暫存在本機，辨識後刪除。</p>
+      <div class="actions"><button id="connect">連線 iPhone</button><button id="disconnect" class="secondary" disabled>中斷連線</button></div>
+      <p id="setup-message" class="small" role="status"></p>
+    </section>
+    <div class="right">
+      <section class="glass"><h2>iPhone App 配對</h2><p class="muted small">先連線 WDA，再產生五分鐘有效的配對碼。iPhone 與 Mac 必須位於同一區域網路；只開放受配對保護的 HTTPS 控制端點。</p>
+        <div class="actions"><button id="mobile-pair" class="secondary">配對 iPhone App</button><button id="mobile-revoke" class="danger">撤銷手機配對</button></div>
+        <div id="mobile-invitation" hidden><img id="mobile-qr" alt="iPhone App 配對 QR Code" width="240" height="240"><p class="small">在 iPhone「設定 → Mac 輔助程式」掃描，或複製下方連結。</p><textarea id="mobile-uri" readonly rows="4" aria-label="配對連結"></textarea><p id="mobile-expiry" class="small muted"></p></div>
+      </section>
+      <section class="glass status" aria-live="polite"><div class="status-head"><h2><span class="step">02</span>抽選進度</h2><span id="state" class="pill">待開始</span></div>
+        <h3 id="progress">準備好，再開始。</h3><p id="reason" class="muted">連線後選擇測試項目。</p><progress id="bar" max="5" value="0"></progress>
+        <div class="actions"><button id="pause" class="secondary" disabled>暫停</button><button id="resume" class="secondary" disabled>恢復</button><button id="stop" class="danger" disabled>停止</button></div>
+      </section>
+      <section class="glass"><div class="status-head"><h2><span class="step">03</span>測試清單 <span id="count">5</span></h2><button id="select-all" class="text-button">全選可執行</button></div>
+        <p class="muted small">原五筆活動：09/22 00:00 至 09/29 23:59（台北時間）。依原順序執行，送出後直接下一筆。</p>
+        <div id="catalog"></div>
+        <label class="check"><input type="checkbox" id="auto-friend" checked>尚未加入店家好友時，自動加入好友</label>
+        <label class="check consent"><input type="checkbox" id="accepted">我確認手機目前的 LINE 帳號正確，並同意執行所選活動的加入好友與抽選。</label>
+        <button id="start" class="primary wide" disabled>開始依序抽選</button>
+        <p class="small muted">「已送出」表示點擊指令完成，不表示中獎或伺服器已確認參加。遇到點擊回應中斷會留為「待確認」。</p>
+      </section>
+      <section class="glass"><h2>實機診斷</h2><p class="muted small">先手動在 LINE 開啟優惠券，即可檢查按鈕辨識。診斷不會抽選。</p>
+        <div class="actions"><button id="inspect" class="secondary">檢查目前畫面</button><button id="capture" class="secondary">儲存畫面診斷</button></div>
+        <pre id="inspection">尚未檢查。</pre>
+        <details><summary>執行事件</summary><pre id="events"></pre></details>
+        <details><summary>載入其他測試清單</summary><p class="small muted">匯入 JSON 陣列；每筆包含 title、url（完整 LIFF 優惠券網址）、startsAt、endsAt（含時區的 ISO 日期）。匯入不會清除紀錄，批次中不能變更。</p><input id="import" type="file" accept="application/json,.json"><button id="restore" class="text-button">恢復原五筆清單</button></details>
+      </section>
+    </div>
+  </div>
+  <footer>LineDraw iOS Lab · 控制與紀錄保存在本機 · 開發用，實際 LINE 相容性待驗證</footer>
+</main><div id="toast" role="alert" hidden></div><script type="module" src="/app.js"></script>
+</body></html>

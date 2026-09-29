@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Reduced from LINE 26.15 / iOS 27 real-device source, 2026-09-28. -->
+<AppiumAUT>
+  <XCUIElementTypeApplication name="LINE" visible="true" x="0" y="0" width="440" height="956">
+    <XCUIElementTypeWindow visible="true" x="0" y="0" width="440" height="956">
+      <XCUIElementTypeWebView visible="true" accessible="false" x="0" y="0" width="440" height="956">
+        <XCUIElementTypeOther visible="true" accessible="false" x="0" y="0" width="440" height="956">
+          <XCUIElementTypeOther visible="false" accessible="false" x="0" y="0" width="440" height="956">
+            <XCUIElementTypeOther visible="true" accessible="false" x="0" y="0" width="440" height="956">
+              <XCUIElementTypeOther name="LINE Official Account Coupon" visible="true" x="0" y="0" width="440" height="956">
+                <XCUIElementTypeStaticText label="官方帳號優惠券" visible="true" accessible="true" x="161" y="74" width="118" height="23"/>
+                <XCUIElementTypeLink label="查看我的優惠券" visible="true" enabled="true" x="16" y="424" width="408" height="44"/>
+                <XCUIElementTypeButton name="參加抽獎" label="參加抽獎" enabled="true" visible="true" accessible="true" x="0" y="866" width="440" height="91"/>
+              </XCUIElementTypeOther>
+            </XCUIElementTypeOther>
+          </XCUIElementTypeOther>
+        </XCUIElementTypeOther>
+      </XCUIElementTypeWebView>
+      <XCUIElementTypeButton name="關閉" label="關閉" enabled="true" visible="true" accessible="true" x="396" y="68" width="40" height="32"/>
+    </XCUIElementTypeWindow>
+  </XCUIElementTypeApplication>
+</AppiumAUT>

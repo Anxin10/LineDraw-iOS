@@ -1,0 +1,731 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		020CB8120026FD12E6CFEF7D /* LineDrawCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4E84345524C56703FA055884 /* LineDrawCore */; };
+		03B3D721FC49E458DD74CBAF /* CompanionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 417A68B4F08BF45F4927681A /* CompanionClient.swift */; };
+		120184C8BF37C35AF22DB702 /* LineDraw-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = AA7D97EF1BE07F5F87F9BF0E /* LineDraw-LICENSE.txt */; };
+		12674B882E759FB8EA6E9C27 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1F20809753A66E502DF742FA /* Assets.xcassets */; };
+		233E66F3DA508435BD5CEE23 /* LocalWDA.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C83AA6B8150CD943825775 /* LocalWDA.swift */; };
+		28C9F11149676364910EA9D0 /* DeviceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 739940755A19961E231DE879 /* DeviceRuntime.swift */; };
+		2A8DD4285A8D8E0DDF6C0A9E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C75B40006E1F822F0799DB8 /* SettingsView.swift */; };
+		2C4E1A8EA83F6AEF8B2BD8F0 /* PairingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966299EED40476A5B90457B8 /* PairingActivityAttributes.swift */; };
+		4312529521C72AE0B045CB80 /* PhonePairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D244D57D0F5514D053DAC30 /* PhonePairing.swift */; };
+		4B3B28D8F310D27EA562B77C /* DeviceSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD427AF2581F22DA2077804B /* DeviceSetupView.swift */; };
+		4ED02415B80C756300CBA858 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 695E28F4E6C6ABEF59C72AC2 /* Security.framework */; };
+		517A1DC4B0B66A505B2370DA /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7D4C02B500763A5000651BC8 /* SystemConfiguration.framework */; };
+		55F05E1560635DE00B53AF0B /* LineDrawDeviceBridge.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = EE01650E74FE3FD57E514C8B /* LineDrawDeviceBridge.xcframework */; };
+		581257922F049063988318E2 /* Rust-THIRD_PARTY_NOTICES.txt in Resources */ = {isa = PBXBuildFile; fileRef = 39A682635BB3D2ED3C98F07C /* Rust-THIRD_PARTY_NOTICES.txt */; };
+		630EC23F3F847788D6A4E106 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D380FFFD59791577F40F5C2 /* AppModel.swift */; };
+		64D40C18B6AD14267B76742D /* DDIDownloadCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D8553B79726280B4EE65DB5 /* DDIDownloadCatalog.swift */; };
+		6E41F004928A5923B17E6424 /* LineDrawApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA96F715C7891AC42456B88F /* LineDrawApp.swift */; };
+		6EAFE3CAE6037ABD304708CB /* THIRD_PARTY_NOTICES.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0711B2805276CE459907BD23 /* THIRD_PARTY_NOTICES.txt */; };
+		7D6E9DE73BBB57BF785AAE65 /* DDIManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFA46F028446E2BABCCCB48 /* DDIManager.swift */; };
+		7FC5B16261BBAC01F6870C76 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FABED937D8C2B3E677692ED8 /* Foundation.framework */; };
+		87132165AFF744288821DB77 /* DeviceProbeServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6212861A52B238F6B42C0A3B /* DeviceProbeServer.swift */; };
+		8A7AFB798B9B48E27CEED15F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FABED937D8C2B3E677692ED8 /* Foundation.framework */; };
+		8C971C457C392D0CDCDDFA37 /* PairingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966299EED40476A5B90457B8 /* PairingActivityAttributes.swift */; };
+		A3CA7445E2053AE7D1E9C768 /* BackgroundTasks.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C83F97F7B588E48F4D93541D /* BackgroundTasks.framework */; };
+		AAABF45B7A458C16A0C9CCBD /* QRScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA51DDFB909F9C8C84FD688 /* QRScanner.swift */; };
+		B81029D26CA5E13AF3F69660 /* LineDrawUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 351AA235177626207AFE6FF2 /* LineDrawUITests.swift */; };
+		D76999FEF0F1636F98FB4F4E /* BundledDDI in Resources */ = {isa = PBXBuildFile; fileRef = 0E9254D1B1A78F4B429D0F38 /* BundledDDI */; };
+		F1805F1FBF4903D45B35823C /* PairingActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 94C6E845B4EA7C7ADF560FF3 /* PairingActivity.appex */; };
+		F4B12E2B1C2173EF3B7A3877 /* CatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC94CB5CE6B742D3FC1FF7A7 /* CatalogView.swift */; };
+		F7363804A94EB477C4B81DE7 /* PairingActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6C29ED870E3BFD41E3C441 /* PairingActivity.swift */; };
+		FC7E88BEC689C96F1970CFA5 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FABED937D8C2B3E677692ED8 /* Foundation.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3A08EF5D9A06117EBBCCBBAA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3E5FBA9DA0B5353CB068307D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1E477E07A04158619E160A8C;
+			remoteInfo = PairingActivity;
+		};
+		E5B1F721221185E6E0198B0E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3E5FBA9DA0B5353CB068307D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4F3DF6BADEE2E6C14C6440E7;
+			remoteInfo = LineDraw;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D6FEE7E8DAAD8E6B0682D57A /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				F1805F1FBF4903D45B35823C /* PairingActivity.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0711B2805276CE459907BD23 /* THIRD_PARTY_NOTICES.txt */ = {isa = PBXFileReference; includeInIndex = 1; path = THIRD_PARTY_NOTICES.txt; sourceTree = "<group>"; };
+		0D380FFFD59791577F40F5C2 /* AppModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		0E9254D1B1A78F4B429D0F38 /* BundledDDI */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; name = BundledDDI; path = .runtime/BundledDDI; sourceTree = "<group>"; };
+		1EA51DDFB909F9C8C84FD688 /* QRScanner.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QRScanner.swift; sourceTree = "<group>"; };
+		1F20809753A66E502DF742FA /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		2C75B40006E1F822F0799DB8 /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		351AA235177626207AFE6FF2 /* LineDrawUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LineDrawUITests.swift; sourceTree = "<group>"; };
+		39A682635BB3D2ED3C98F07C /* Rust-THIRD_PARTY_NOTICES.txt */ = {isa = PBXFileReference; includeInIndex = 1; path = "Rust-THIRD_PARTY_NOTICES.txt"; sourceTree = "<group>"; };
+		3E3B2ACEF20B869F295FCF22 /* LineDraw.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LineDraw.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		417A68B4F08BF45F4927681A /* CompanionClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CompanionClient.swift; sourceTree = "<group>"; };
+		4AFA46F028446E2BABCCCB48 /* DDIManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DDIManager.swift; sourceTree = "<group>"; };
+		4D244D57D0F5514D053DAC30 /* PhonePairing.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PhonePairing.swift; sourceTree = "<group>"; };
+		5BA7917B86E79612136EF64C /* LineDrawUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LineDrawUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6212861A52B238F6B42C0A3B /* DeviceProbeServer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceProbeServer.swift; sourceTree = "<group>"; };
+		695E28F4E6C6ABEF59C72AC2 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Security.framework; sourceTree = DEVELOPER_DIR; };
+		739940755A19961E231DE879 /* DeviceRuntime.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceRuntime.swift; sourceTree = "<group>"; };
+		7D4C02B500763A5000651BC8 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/SystemConfiguration.framework; sourceTree = DEVELOPER_DIR; };
+		8D8553B79726280B4EE65DB5 /* DDIDownloadCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DDIDownloadCatalog.swift; sourceTree = "<group>"; };
+		94C6E845B4EA7C7ADF560FF3 /* PairingActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PairingActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		966299EED40476A5B90457B8 /* PairingActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PairingActivityAttributes.swift; sourceTree = "<group>"; };
+		AA7D97EF1BE07F5F87F9BF0E /* LineDraw-LICENSE.txt */ = {isa = PBXFileReference; includeInIndex = 1; path = "LineDraw-LICENSE.txt"; sourceTree = "<group>"; };
+		AD427AF2581F22DA2077804B /* DeviceSetupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceSetupView.swift; sourceTree = "<group>"; };
+		C83F97F7B588E48F4D93541D /* BackgroundTasks.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = BackgroundTasks.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/BackgroundTasks.framework; sourceTree = DEVELOPER_DIR; };
+		CC94CB5CE6B742D3FC1FF7A7 /* CatalogView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CatalogView.swift; sourceTree = "<group>"; };
+		E0C83AA6B8150CD943825775 /* LocalWDA.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalWDA.swift; sourceTree = "<group>"; };
+		EA6C29ED870E3BFD41E3C441 /* PairingActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PairingActivity.swift; sourceTree = "<group>"; };
+		EE01650E74FE3FD57E514C8B /* LineDrawDeviceBridge.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; name = LineDrawDeviceBridge.xcframework; path = .runtime/LineDrawDeviceBridge.xcframework; sourceTree = "<group>"; };
+		FA96F715C7891AC42456B88F /* LineDrawApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LineDrawApp.swift; sourceTree = "<group>"; };
+		FABED937D8C2B3E677692ED8 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		517B5B9F8E012EAF5C1E84B7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FC7E88BEC689C96F1970CFA5 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		94502D8B4AF5A9B6129407B3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7FC5B16261BBAC01F6870C76 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C34EC9189606C35D95A5E298 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8A7AFB798B9B48E27CEED15F /* Foundation.framework in Frameworks */,
+				020CB8120026FD12E6CFEF7D /* LineDrawCore in Frameworks */,
+				55F05E1560635DE00B53AF0B /* LineDrawDeviceBridge.xcframework in Frameworks */,
+				4ED02415B80C756300CBA858 /* Security.framework in Frameworks */,
+				517A1DC4B0B66A505B2370DA /* SystemConfiguration.framework in Frameworks */,
+				A3CA7445E2053AE7D1E9C768 /* BackgroundTasks.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2246B3DFB110E573A0BC057C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3E3B2ACEF20B869F295FCF22 /* LineDraw.app */,
+				94C6E845B4EA7C7ADF560FF3 /* PairingActivity.appex */,
+				5BA7917B86E79612136EF64C /* LineDrawUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		58DE46C2A9B96A670B2D726B /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				FABED937D8C2B3E677692ED8 /* Foundation.framework */,
+				695E28F4E6C6ABEF59C72AC2 /* Security.framework */,
+				7D4C02B500763A5000651BC8 /* SystemConfiguration.framework */,
+				C83F97F7B588E48F4D93541D /* BackgroundTasks.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		A0A7F429E2DD4A1366102992 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				1F20809753A66E502DF742FA /* Assets.xcassets */,
+				0711B2805276CE459907BD23 /* THIRD_PARTY_NOTICES.txt */,
+				39A682635BB3D2ED3C98F07C /* Rust-THIRD_PARTY_NOTICES.txt */,
+				AA7D97EF1BE07F5F87F9BF0E /* LineDraw-LICENSE.txt */,
+			);
+			name = Resources;
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		AF15A07B740940C5BCC7A9A4 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				0D380FFFD59791577F40F5C2 /* AppModel.swift */,
+				CC94CB5CE6B742D3FC1FF7A7 /* CatalogView.swift */,
+				417A68B4F08BF45F4927681A /* CompanionClient.swift */,
+				8D8553B79726280B4EE65DB5 /* DDIDownloadCatalog.swift */,
+				4AFA46F028446E2BABCCCB48 /* DDIManager.swift */,
+				6212861A52B238F6B42C0A3B /* DeviceProbeServer.swift */,
+				739940755A19961E231DE879 /* DeviceRuntime.swift */,
+				AD427AF2581F22DA2077804B /* DeviceSetupView.swift */,
+				FA96F715C7891AC42456B88F /* LineDrawApp.swift */,
+				E0C83AA6B8150CD943825775 /* LocalWDA.swift */,
+				4D244D57D0F5514D053DAC30 /* PhonePairing.swift */,
+				1EA51DDFB909F9C8C84FD688 /* QRScanner.swift */,
+				2C75B40006E1F822F0799DB8 /* SettingsView.swift */,
+			);
+			name = App;
+			path = App;
+			sourceTree = "<group>";
+		};
+		AF6ADA5FACCAFB0479BAE122 /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				351AA235177626207AFE6FF2 /* LineDrawUITests.swift */,
+			);
+			name = UITests;
+			path = UITests;
+			sourceTree = "<group>";
+		};
+		C4DD243659F841048FF16D1B /* PairingActivity */ = {
+			isa = PBXGroup;
+			children = (
+				EA6C29ED870E3BFD41E3C441 /* PairingActivity.swift */,
+			);
+			name = PairingActivity;
+			path = PairingActivity;
+			sourceTree = "<group>";
+		};
+		CE3A1CF63838F91578B7BB99 = {
+			isa = PBXGroup;
+			children = (
+				2246B3DFB110E573A0BC057C /* Products */,
+				E71B3294E3A27C0EC4B7E23D /* Frameworks */,
+				AF15A07B740940C5BCC7A9A4 /* App */,
+				A0A7F429E2DD4A1366102992 /* Resources */,
+				0E9254D1B1A78F4B429D0F38 /* BundledDDI */,
+				D682F4D815320EA6BB98E6D8 /* Shared */,
+				C4DD243659F841048FF16D1B /* PairingActivity */,
+				AF6ADA5FACCAFB0479BAE122 /* UITests */,
+				EE01650E74FE3FD57E514C8B /* LineDrawDeviceBridge.xcframework */,
+			);
+			sourceTree = "<group>";
+		};
+		D682F4D815320EA6BB98E6D8 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				966299EED40476A5B90457B8 /* PairingActivityAttributes.swift */,
+			);
+			name = Shared;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		E71B3294E3A27C0EC4B7E23D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				58DE46C2A9B96A670B2D726B /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1E477E07A04158619E160A8C /* PairingActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4E1B5CAEBCA26DEEDFFF0EC0 /* Build configuration list for PBXNativeTarget "PairingActivity" */;
+			buildPhases = (
+				B80A296FF44371F277EF8759 /* Sources */,
+				517B5B9F8E012EAF5C1E84B7 /* Frameworks */,
+				B872E7B51EF7A640F9688A36 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PairingActivity;
+			productName = PairingActivity;
+			productReference = 94C6E845B4EA7C7ADF560FF3 /* PairingActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		4F3DF6BADEE2E6C14C6440E7 /* LineDraw */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 772C3C7C6B4F995ACC02BC1F /* Build configuration list for PBXNativeTarget "LineDraw" */;
+			buildPhases = (
+				4D4BA7923E2AB7D3B05173B0 /* Sources */,
+				C34EC9189606C35D95A5E298 /* Frameworks */,
+				93FEA616BC7D71A7F8173A82 /* Resources */,
+				D6FEE7E8DAAD8E6B0682D57A /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				858A67E6EB73B9E4C3D92BF5 /* PBXTargetDependency */,
+			);
+			name = LineDraw;
+			packageProductDependencies = (
+				4E84345524C56703FA055884 /* LineDrawCore */,
+			);
+			productName = LineDraw;
+			productReference = 3E3B2ACEF20B869F295FCF22 /* LineDraw.app */;
+			productType = "com.apple.product-type.application";
+		};
+		71EB5B6C0C8C9337E2DE9CF5 /* LineDrawUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E18EFB173DA2953648185187 /* Build configuration list for PBXNativeTarget "LineDrawUITests" */;
+			buildPhases = (
+				A6B76363378897F759ED799B /* Sources */,
+				94502D8B4AF5A9B6129407B3 /* Frameworks */,
+				F6A8AA686A8566274B2DBBCA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				071C122324A7E333D5EB067E /* PBXTargetDependency */,
+			);
+			name = LineDrawUITests;
+			productName = LineDrawUITests;
+			productReference = 5BA7917B86E79612136EF64C /* LineDrawUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3E5FBA9DA0B5353CB068307D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = 67D32F950ABD1BED4FE1A66F /* Build configuration list for PBXProject "LineDraw" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = CE3A1CF63838F91578B7BB99;
+			minimizedProjectReferenceProxies = 0;
+			packageReferences = (
+				4FD57D1C3C5BC88F1296DD0E /* XCLocalSwiftPackageReference "Core" */,
+			);
+			preferredProjectObjectVersion = 100;
+			productRefGroup = 2246B3DFB110E573A0BC057C /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4F3DF6BADEE2E6C14C6440E7 /* LineDraw */,
+				1E477E07A04158619E160A8C /* PairingActivity */,
+				71EB5B6C0C8C9337E2DE9CF5 /* LineDrawUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		93FEA616BC7D71A7F8173A82 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				12674B882E759FB8EA6E9C27 /* Assets.xcassets in Resources */,
+				D76999FEF0F1636F98FB4F4E /* BundledDDI in Resources */,
+				6EAFE3CAE6037ABD304708CB /* THIRD_PARTY_NOTICES.txt in Resources */,
+				581257922F049063988318E2 /* Rust-THIRD_PARTY_NOTICES.txt in Resources */,
+				120184C8BF37C35AF22DB702 /* LineDraw-LICENSE.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B872E7B51EF7A640F9688A36 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F6A8AA686A8566274B2DBBCA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4D4BA7923E2AB7D3B05173B0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				630EC23F3F847788D6A4E106 /* AppModel.swift in Sources */,
+				F4B12E2B1C2173EF3B7A3877 /* CatalogView.swift in Sources */,
+				03B3D721FC49E458DD74CBAF /* CompanionClient.swift in Sources */,
+				64D40C18B6AD14267B76742D /* DDIDownloadCatalog.swift in Sources */,
+				7D6E9DE73BBB57BF785AAE65 /* DDIManager.swift in Sources */,
+				87132165AFF744288821DB77 /* DeviceProbeServer.swift in Sources */,
+				28C9F11149676364910EA9D0 /* DeviceRuntime.swift in Sources */,
+				4B3B28D8F310D27EA562B77C /* DeviceSetupView.swift in Sources */,
+				6E41F004928A5923B17E6424 /* LineDrawApp.swift in Sources */,
+				233E66F3DA508435BD5CEE23 /* LocalWDA.swift in Sources */,
+				4312529521C72AE0B045CB80 /* PhonePairing.swift in Sources */,
+				AAABF45B7A458C16A0C9CCBD /* QRScanner.swift in Sources */,
+				2A8DD4285A8D8E0DDF6C0A9E /* SettingsView.swift in Sources */,
+				8C971C457C392D0CDCDDFA37 /* PairingActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A6B76363378897F759ED799B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B81029D26CA5E13AF3F69660 /* LineDrawUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B80A296FF44371F277EF8759 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F7363804A94EB477C4B81DE7 /* PairingActivity.swift in Sources */,
+				2C4E1A8EA83F6AEF8B2BD8F0 /* PairingActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		071C122324A7E333D5EB067E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = LineDraw;
+			target = 4F3DF6BADEE2E6C14C6440E7 /* LineDraw */;
+			targetProxy = E5B1F721221185E6E0198B0E /* PBXContainerItemProxy */;
+		};
+		858A67E6EB73B9E4C3D92BF5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = PairingActivity;
+			target = 1E477E07A04158619E160A8C /* PairingActivity */;
+			targetProxy = 3A08EF5D9A06117EBBCCBBAA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0C5DC382F916565A466C0C6A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.beybladehunter.linedraw.ios.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = LineDraw;
+			};
+			name = Debug;
+		};
+		2B8C68B7E496B75AF8F9BAD1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 15;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lc++",
+					"-liconv",
+					"-lresolv",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.beybladehunter.linedraw.ios;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		5DA685458EAA92AB3D753A60 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		716B69DF6C9CD5195F286355 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 15;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PairingActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.beybladehunter.linedraw.ios.PairingActivity;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		921E0DEA1C8B11FAB552B8D6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A3136A0C5042D80AD6034E18 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.beybladehunter.linedraw.ios.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = LineDraw;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		C25685E68C50CA37A701960D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 15;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PairingActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.beybladehunter.linedraw.ios.PairingActivity;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		CC212A7408B1E1CA423D8EA0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 15;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lc++",
+					"-liconv",
+					"-lresolv",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.beybladehunter.linedraw.ios;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4E1B5CAEBCA26DEEDFFF0EC0 /* Build configuration list for PBXNativeTarget "PairingActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C25685E68C50CA37A701960D /* Release */,
+				716B69DF6C9CD5195F286355 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		67D32F950ABD1BED4FE1A66F /* Build configuration list for PBXProject "LineDraw" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5DA685458EAA92AB3D753A60 /* Debug */,
+				921E0DEA1C8B11FAB552B8D6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		772C3C7C6B4F995ACC02BC1F /* Build configuration list for PBXNativeTarget "LineDraw" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2B8C68B7E496B75AF8F9BAD1 /* Release */,
+				CC212A7408B1E1CA423D8EA0 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E18EFB173DA2953648185187 /* Build configuration list for PBXNativeTarget "LineDrawUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A3136A0C5042D80AD6034E18 /* Release */,
+				0C5DC382F916565A466C0C6A /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		4FD57D1C3C5BC88F1296DD0E /* XCLocalSwiftPackageReference "Core" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Core;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4E84345524C56703FA055884 /* LineDrawCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4FD57D1C3C5BC88F1296DD0E /* XCLocalSwiftPackageReference "Core" */;
+			productName = LineDrawCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 3E5FBA9DA0B5353CB068307D /* Project object */;
+}

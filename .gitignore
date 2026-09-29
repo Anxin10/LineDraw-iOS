@@ -1,0 +1,40 @@
+# Local build products and installed dependencies
+.runtime/
+.build/
+.data/
+DerivedData/
+node_modules/
+target/
+build/
+__pycache__/
+*.pyc
+*.xcframework/
+*.app/
+*.ipa
+*.dSYM/
+
+# Personal IDE state
+.DS_Store
+xcuserdata/
+*.xcuserstate
+.idea/
+.vscode/
+
+# Local credentials and runtime configuration
+.env
+.env.*
+!.env.example
+*.p12
+*.p8
+*.pfx
+*.mobileprovision
+*.provisionprofile
+*.key
+*.pem
+*pairing*.plist
+config/local.json
+
+# Test output
+playwright-report/
+test-results/
+*.log

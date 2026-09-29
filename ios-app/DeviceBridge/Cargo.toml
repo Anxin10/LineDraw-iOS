@@ -1,0 +1,28 @@
+[package]
+name = "linedraw-device-bridge"
+version = "0.1.0"
+edition = "2024"
+license = "PolyForm-Noncommercial-1.0.0"
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+idevice = { path = "vendor/idevice", default-features = false, features = ["ring", "tcp", "xctest", "heartbeat", "mobile_image_mounter", "tss", "remote_pairing", "cryptexd"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+plist = "1"
+zeroize = "1"
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+
+[features]
+host-setup = ["idevice/usbmuxd"]
+
+[[bin]]
+name = "linedraw-pair-usb"
+path = "src/bin/pair_usb.rs"
+required-features = ["host-setup"]
