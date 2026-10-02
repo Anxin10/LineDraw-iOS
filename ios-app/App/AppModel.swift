@@ -248,7 +248,7 @@ import LineDrawCore
                 }
                 let phases=driver.phaseTimings.keys.sorted().map{key in let value=driver.phaseTimings[key]!;return "\(key)=\(Int(value["count"] ?? 0))/\(String(format:"%.2f",value["seconds"] ?? 0))s"}.joined(separator:"；")
                 try? db?.log("DEVICE_PHASE_TIMING",phases)
-                try? db?.log("DEVICE_LOOKUP",driver.lookupMode+"；直接開頁 \(driver.navigationCounts["directOpen",default:0])；關閉退回 \(driver.navigationCounts["closeFallback",default:0])")
+                try? db?.log("DEVICE_LOOKUP",driver.lookupMode+"；直接開頁 \(driver.navigationCounts["directOpen",default:0])；畫面就緒 \(driver.navigationCounts["ready:settled",default:0]+driver.navigationCounts["ready:document",default:0])")
                 busy=true;deviceStage=deviceProgress.reason
                 try db!.log("DEVICE_BATCH_FINISHED","手機端批次結束；完成位置 \(deviceProgress.index) / \(deviceProgress.total)。\(deviceProgress.reason)");data=db!.snapshot
                 await runtime.stop(success:deviceProgress.state=="COMPLETED")
@@ -333,9 +333,10 @@ import LineDrawCore
             runtime.onExpired={[weak self] in self?.deviceTask?.cancel()}
             let report=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent(review ? "device-review.json":"device-probe.json")
             let inspectNavigation=review && ProcessInfo.processInfo.arguments.contains("--inspect-navigation")
+            var reviewObservations=[[String:Any]]()
             var step="starting";var completed=0;var findings=[String]();let began=Date();var finalTimings=[String:[String:Double]]();var finalPhaseTimings=[String:[String:Double]]();var finalLookupMode="unknown";var finalNavigationCounts=[String:Int]()
             let fixture=DeviceProbeServer()
-            @MainActor func save(_ status:String){let body:[String:Any]=["status":status,"step":step,"completed":completed,"fixtureRequests":fixture.requests,"findings":findings,"elapsed":Date().timeIntervalSince(began),"time":WireJSON.date(Date()),"wdaTimings":runtime.driver?.timings ?? finalTimings,"lookupMode":runtime.driver?.lookupMode ?? finalLookupMode,"phaseTimings":runtime.driver?.phaseTimings ?? finalPhaseTimings,"navigationCounts":runtime.driver?.navigationCounts ?? finalNavigationCounts];if let bytes=try? JSONSerialization.data(withJSONObject:body,options:.prettyPrinted){try? bytes.write(to:report,options:.atomic)}}
+            @MainActor func save(_ status:String){let body:[String:Any]=["status":status,"step":step,"observations":reviewObservations,"completed":completed,"fixtureRequests":fixture.requests,"findings":findings,"elapsed":Date().timeIntervalSince(began),"time":WireJSON.date(Date()),"wdaTimings":runtime.driver?.timings ?? finalTimings,"lookupMode":runtime.driver?.lookupMode ?? finalLookupMode,"phaseTimings":runtime.driver?.phaseTimings ?? finalPhaseTimings,"navigationCounts":runtime.driver?.navigationCounts ?? finalNavigationCounts];if let bytes=try? JSONSerialization.data(withJSONObject:body,options:.prettyPrinted){try? bytes.write(to:report,options:.atomic)}}
             save("running")
             defer{fixture.stop()}
             do{
@@ -366,6 +367,11 @@ import LineDrawCore
                             let screen=try await driver.snapshot()
                             if screen.navigationVerified,itemProgress.itemStep<2{itemProgress.itemStep=2;runtime.report(itemProgress)}
                             let decision=DeviceScreenRules.classify(screen)
+                            if inspectNavigation {
+                                reviewObservations.append(["index":i,"elapsed":Date().timeIntervalSince(began),"decision":String(describing:decision),"bundle":screen.bundle,"pending":screen.navigationPending,"ready":screen.navigationVerified,"targeted":screen.targeted,"width":screen.width,"height":screen.height,"alerts":screen.nodes.filter{$0.type=="XCUIElementTypeAlert"}.map{["labels":$0.labels,"x":$0.rect.x,"y":$0.rect.y,"width":$0.rect.width,"height":$0.rect.height] as [String:Any]},"documentMatches":screen.nodes.filter{$0.type=="XCUIElementTypeWebView"}.flatMap(\.labels).compactMap{LinkPolicy.canonical($0)}.map{$0==url}])
+                                if reviewObservations.count>40{reviewObservations.removeFirst(reviewObservations.count-40)}
+                                save("running")
+                            }
                             let key=DeviceScreenRules.stabilityKey(screen,decision:decision)
                             if !screen.navigationPending,(screen.navigationVerified || screen.navigationFingerprint != baseline),key==previous {
                                 if case .terminal(let value)=decision{result=value;break}

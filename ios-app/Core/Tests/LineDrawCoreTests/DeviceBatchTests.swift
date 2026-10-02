@@ -35,9 +35,19 @@ final class DeviceScreenTests:XCTestCase {
     final class Driver:DeviceDriver {
         var snapshots=[DeviceScreen]();var opens=[String]();var taps=0;var network=true;var tapError:Error?;var onTap:(()->Void)?;var current=0;var sequence=[DeviceScreen]();var baseline="navigation-boundary"
         var onSnapshot:(()->Void)?
-        func open(_ url:String)async throws->String{opens.append(url);current=min(opens.count-1,max(snapshots.count-1,0));return baseline}
-        func snapshot()async throws->DeviceScreen{onSnapshot?();if !sequence.isEmpty{return sequence.removeFirst()};return snapshots[min(current,snapshots.count-1)]}
-        func tap(_ target:ScreenNode)async throws{taps+=1;onTap?();if let tapError{throw tapError}}
+        var useDirectNavigation=false;var navigation:DeviceNavigationGuard?;var now:()->TimeInterval={0};var events=[String]()
+        func open(_ url:String)async throws->String{
+            events.append("open");opens.append(url);current=min(opens.count-1,max(snapshots.count-1,0))
+            if useDirectNavigation{navigation=DeviceNavigationGuard(expectedBundle:DeviceScreenRules.lineBundle,targetURL:url);navigation?.didOpen(at:now())}
+            return baseline
+        }
+        func snapshot()async throws->DeviceScreen{
+            events.append("read");onSnapshot?()
+            var screen = !sequence.isEmpty ? sequence.removeFirst():snapshots[min(current,snapshots.count-1)]
+            if var navigation{let ready=navigation.observe(screen,at:now());self.navigation=navigation;screen.navigationVerified=ready;screen.navigationPending = !ready}
+            return screen
+        }
+        func tap(_ target:ScreenNode)async throws{events.append("tap");taps+=1;onTap?();if let tapError{throw tapError}}
         func online()async->Bool{network}
     }
     var records=[String:ParticipationRecord]();var time:Double=0
@@ -77,6 +87,28 @@ final class DeviceScreenTests:XCTestCase {
         let d=Driver();d.snapshots=[DeviceScreenTests().screen(["抽選"])];let e=engine(d)
         await e.run([row(0),row(1)],allInitial:[row(0),row(1)],filter:CatalogFilter(),autoFriend:true,autoContinue:false)
         XCTAssertEqual(d.taps,2);XCTAssertEqual(e.progress.state,"COMPLETED");XCTAssertEqual(records.values.map(\.status),["SUBMITTED","SUBMITTED"])
+    }
+    func testDirectNavigationWithProgressOverCloseRunsDrawWinLossAndEndedInOrder()async {
+        let d=Driver();d.useDirectNavigation=true;d.now={self.time}
+        d.snapshots=["抽選","加入好友並參加抽獎","查看已領取的優惠券","可惜...沒有抽中！","已結束"].map{label in
+            var screen=DeviceScreenTests().screen([label])
+            screen.nodes.append(.init(type:"XCUIElementTypeStaticText",labels:["LineDraw 抽選"],rect:.init(x:20,y:30,width:350,height:90)))
+            screen.nodes.append(.init(type:"XCUIElementTypeButton",labels:["關閉"],rect:.init(x:350,y:70,width:40,height:40)))
+            return screen
+        }
+        let rows=(0..<5).map(row),e=engine(d)
+        await e.run(rows,allInitial:rows,filter:CatalogFilter(),autoFriend:true,autoContinue:false)
+        XCTAssertEqual(e.progress.state,"COMPLETED");XCTAssertEqual(d.opens,rows.map{$0.canonicalURL!})
+        XCTAssertEqual(d.taps,2)
+        XCTAssertEqual(rows.map{records[$0.activityKey]?.status},["SUBMITTED","SUBMITTED","ALREADY","COMPLETE","ENDED"])
+    }
+    func testNextURLImmediatelyFollowsAcknowledgedTapAndDurableSave()async {
+        let d=Driver();d.useDirectNavigation=true;d.now={self.time};d.snapshots=[DeviceScreenTests().screen(["抽選"])]
+        let e=engine(d,write:{row,record in self.records[row.activityKey]=record;d.events.append("save:"+(record?.status ?? "nil"))})
+        await e.run([row(0),row(1)],allInitial:[row(0),row(1)],filter:CatalogFilter(),autoFriend:true,autoContinue:false)
+        guard let index=d.events.firstIndex(of:"tap") else{return XCTFail("No tap")}
+        XCTAssertEqual(Array(d.events[index...].prefix(3)),["tap","save:SUBMITTED","open"])
+        XCTAssertEqual(d.taps,2);XCTAssertEqual(e.progress.state,"COMPLETED")
     }
     func testVerifiedNativeButtonUsesOneObservationPerItem()async {
         let d=Driver();var ready=DeviceScreenTests().screen(["抽選"]);ready.navigationVerified=true

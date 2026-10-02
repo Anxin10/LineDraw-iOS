@@ -1,4 +1,6 @@
-# LineDraw iPhone 1.1.0 build 15 — device POC
+# LineDraw iPhone 1.1.0 build 16 — device POC
+
+build 16 移除換頁時關閉舊優惠券、收合動態島與頂部 OCR 的流程。抽選指令成功回應並保存紀錄後，直接送出下一筆網址；LINE 沒有暴露網址時，以新的穩定畫面確認底部按鈕或結果，不要求讀到舊券關閉。系統進度遮住右上角不再因此停止。詳見[修正與驗證](docs/DIRECT_LINK_BUILD16_2026-10-02.md)。
 
 build 15 更新五連結測試區，依序為 Qd5hJVq、QGhOsnX、XnMZVTX、W0zn6z4、yz7xFEWc，截止台北時間 2026/10/31 23:59。升級封存上一組內建活動並保留參加紀錄，自訂清單不覆蓋。抽選引擎沿用 build 14，本次不執行抽選，交由使用者手動測試。詳見[清單更新紀錄](docs/TEST_LINKS_BUILD15_2026-09-29.md)。
 

@@ -38,8 +38,6 @@ import LineDrawCore
     private var nextTargetedLookup:TimeInterval=0
     private var lookupBudget=DeviceLookupBudget()
     private var navigationGuard:DeviceNavigationGuard?
-    private var navigationURL:String?
-    private var navigationBegan:TimeInterval=0
     private var lastDrawAck:TimeInterval?
     private(set) var navigationCounts=[String:Int]()
     private(set) var lookupMode="targeted"
@@ -121,33 +119,16 @@ import LineDrawCore
     func shutdown()async{if !sessionID.isEmpty{_=try? await request("DELETE","session/\(sessionID)")};var r=URLRequest(url:base.appendingPathComponent("wda/shutdown"));r.timeoutInterval=3;_=try? await session.data(for:r);sessionID="";network.cancel();session.invalidateAndCancel()}
     func active()async throws->String{let value=try await request("GET",route("wda/activeAppInfo"));return (value as? [String:Any])?["bundleId"] as? String ?? ""}
     func snapshot()async throws->DeviceScreen{
-        var screen=try await capture(allowOCR:navigationGuard?.verified != false,preferTargeted:navigationGuard?.verified != false)
+        // 深連結換頁期間保留完整原生畫面讀取；LINE 替換 WebView 時，
+        // 稀疏元素查詢可能造成 WDA 連線中斷。
+        var screen=try await capture(allowOCR:true,preferTargeted:navigationGuard?.verified != false)
         guard var navigation=navigationGuard else{return screen}
-        #if DEBUG
-        // Fixture-only identity, read from Safari's actual rendered page.
-        if let fixtureBaseURL,URL(string:fixtureBaseURL)?.host=="127.0.0.1",expectedBundle=="com.apple.mobilesafari",
-           let navigationURL,screen.bundle==expectedBundle,
-           screen.nodes.flatMap(\.labels).contains("LineDraw 離線測試 "+URL(string:navigationURL)!.lastPathComponent){navigation.confirmedClosure()}
-        #endif
-        let verified=navigation.observe(screen)
+        let wasVerified=navigation.verified
+        let ready=navigation.observe(screen)
         navigationGuard=navigation
-        let blocked:Bool
-        if case .pause=DeviceScreenRules.classify(screen,expectedBundle:expectedBundle){blocked=true}else{blocked=false}
-        if !verified,!blocked,screen.bundle==expectedBundle,ProcessInfo.processInfo.systemUptime-navigationBegan>=0.8,
-           DeviceScreenRules.closeTarget(screen) != nil {
-            // The direct open did not yield an observable page boundary. No draw
-            // is authorized yet. Close once, then open the same intended URL.
-            guard let url=navigationURL else{throw DeviceDriverError.notDispatched}
-            navigationCounts["closeFallback",default:0]+=1
-            let began=ProcessInfo.processInfo.systemUptime
-            try await closeCoupon(screen)
-            navigation.confirmedClosure();navigationGuard=navigation
-            try await dispatchURL(url)
-            measuredPhase("navigation.closeFallback",began)
-            screen=try await capture(allowOCR:true,preferTargeted:false)
-        }
-        screen.navigationVerified=navigationGuard?.verified==true && screen.bundle==expectedBundle
-        screen.navigationPending = !screen.navigationVerified
+        if ready,!wasVerified{navigationCounts["ready:"+navigation.confirmation,default:0]+=1}
+        screen.navigationVerified=ready
+        screen.navigationPending = !ready
         return remember(screen)
     }
     private func capture(allowOCR:Bool,forceOCR:Bool=false,preferTargeted:Bool=true)async throws->DeviceScreen {
@@ -299,92 +280,17 @@ import LineDrawCore
             }
         }.value
     }
-    private func progressOverlay(_ screen:DeviceScreen)async throws->(banner:ScreenRect?,headerVisible:Bool) {
-        let began=ProcessInfo.processInfo.systemUptime
-        defer{measuredPhase("overlay.captureAndOCR",began)}
-        guard let raw=try await request("GET",route("screenshot")) as? String,let bytes=Data(base64Encoded:raw) else{throw LineDrawError.message("無法確認頂部系統進度是否遮擋，已停止。")}
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--inspect-navigation") {
-            // One private diagnostic frame, overwritten; never included in exports.
-            let file=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("navigation-overlay.png")
-            try? bytes.write(to:file,options:.atomic)
-        }
-        #endif
-        let width=screen.width,height=screen.height
-        return try await Task.detached(priority:.userInitiated){
-            let request=VNRecognizeTextRequest();request.recognitionLevel = .accurate
-            request.recognitionLanguages=["zh-Hant","en-US"];request.usesLanguageCorrection=false
-            request.regionOfInterest=CGRect(x:0,y:0.82,width:1,height:0.18)
-            try VNImageRequestHandler(data:bytes).perform([request])
-            var headerVisible=false
-            let matches=(request.results ?? []).compactMap{observation->ScreenRect? in
-                // Vision reports 0.5 for this correctly recognized bold Chinese header
-                // on the test phone. Exact text plus two observations confirms exposure.
-                if let text=observation.topCandidates(1).first,text.confidence>=0.4,DeviceScreenRules.normalize(text.string)=="官方帳號優惠券"{headerVisible=true}
-                guard let text=observation.topCandidates(1).first,text.confidence>=0.85,
-                      DeviceScreenRules.normalize(text.string)=="LineDraw抽選" else{return nil}
-                let b=observation.boundingBox
-                return ScreenRect.fromVision(b,region:request.regionOfInterest,width:width,height:height)
-            }
-            return (await DeviceNavigation.progressBanner(matches,width:width,height:height),headerVisible)
-        }.value
-    }
-    private func collapseOwnProgress(over screen:DeviceScreen)async throws {
-        guard screen.bundle==expectedBundle else{throw DeviceDriverError.notDispatched}
-        let overlay=try await DeviceNavigation.awaitHeaderExposure(read:{
-            try await self.progressOverlay(screen)
-        },canAct:{self.canAct()})
-        guard let banner=overlay.banner else{
-            guard overlay.headerVisible else{throw LineDrawError.message("優惠券頂部被遮擋，已停止；請收起系統橫幅後再開始。")}
-            return
-        }
-        guard try await active()==expectedBundle,canAct() else{throw DeviceDriverError.notDispatched}
-        // Only our recognized title, away from the task's Stop control. An inward
-        // swipe collapses the expanded system activity without cancelling the task.
-        let x=banner.x+min(8,banner.width/4),y=banner.y+banner.height/2
-        // The overlay belongs to SpringBoard, so target the system app for its
-        // gesture, then restore normal application detection before touching LINE.
-        _=try await request("POST",route("appium/settings"),["settings":["defaultActiveApplication":"com.apple.springboard"]])
-        do {
-            _=try await request("POST",route("wda/dragfromtoforduration"),["fromX":x,"fromY":y,"toX":screen.width/2,"toY":y,"duration":0.2])
-        }catch{
-            try? await restoreAutomaticApplication()
-            throw error
-        }
-        try await restoreAutomaticApplication()
-        recentScreen=nil
-        var clear=0
-        for _ in 0..<8 {
-            try Task.checkCancellation();guard canAct() else{throw CancellationError()}
-            let overlay=try await progressOverlay(screen)
-            clear=overlay.banner==nil && overlay.headerVisible ? clear+1:0
-            if clear>=2{return}
-            try await Task.sleep(for:.milliseconds(150))
-        }
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--inspect-navigation"),let raw=try? await request("GET",route("screenshot")) as? String,let bytes=Data(base64Encoded:raw){
-            let file=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("navigation-overlay.png")
-            try? bytes.write(to:file,options:.atomic)
-        }
-        #endif
-        throw LineDrawError.message("LineDraw 系統進度仍遮住關閉按鈕，已停止；請收起動態島後再開始。")
-    }
-    private func restoreAutomaticApplication()async throws {
-        let restore=Task<Void,Error>{
-            _=try await self.request("POST",self.route("appium/settings"),["settings":["defaultActiveApplication":"auto"]])
-        }
-        try await restore.value
-    }
     func open(_ url:String)async throws->String{
         let began=ProcessInfo.processInfo.systemUptime
         defer{measuredPhase("navigation.open",began)}
         guard LinkPolicy.canonical(url)==url else{throw LineDrawError.message("只支援已解析的 LINE 優惠券網址。")}
         guard canAct() else{throw CancellationError()}
         navigationGuard=DeviceNavigationGuard(expectedBundle:expectedBundle,targetURL:url)
-        navigationURL=url;navigationBegan=began
-        // No result read, source request, closing gesture or OCR before dispatch.
-        // The navigation gate in snapshot() protects against old-page taps.
+        // 直接送出下一筆網址，之前不讀結果、不查畫面、不關閉也不做 OCR。
+        // 網址成功回應後，再以新的畫面觀察確認就緒。
         try await dispatchURL(url)
+        try Task.checkCancellation();guard canAct() else{throw CancellationError()}
+        navigationGuard?.didOpen(at:ProcessInfo.processInfo.systemUptime)
         navigationCounts["directOpen",default:0]+=1
         return "pending-navigation:"+UUID().uuidString
     }
@@ -400,21 +306,6 @@ import LineDrawCore
         #if DEBUG
         if expectedBundle=="com.apple.mobilesafari",let fixtureBaseURL,URL(string:fixtureBaseURL)?.host=="127.0.0.1"{fixtureNavigated=true}
         #endif
-    }
-    private func closeCoupon(_ observed:DeviceScreen)async throws {
-        guard canAct() else{throw CancellationError()}
-        try await collapseOwnProgress(over:observed)
-        let before=try await capture(allowOCR:false,preferTargeted:false)
-        guard let close=DeviceScreenRules.closeTarget(before) else{throw DeviceDriverError.notDispatched}
-        try await validatedTap(close,on:before)
-        try await DeviceNavigation.afterClosing(stillVisible:{
-            let bundle=try await self.active()
-            if bundle=="com.apple.springboard"{return true}
-            guard bundle==self.expectedBundle else{throw LineDrawError.message("換頁時已離開 LINE，已停止。")}
-            let visible=try await self.progressOverlay(before)
-            return visible.headerVisible || visible.banner != nil
-        },canAct:{self.canAct()})
-        invalidateObservation()
     }
     func tap(_ target:ScreenNode)async throws{
         guard canAct() else{throw DeviceDriverError.notDispatched}
@@ -440,15 +331,14 @@ import LineDrawCore
     private func validatedTap(_ target:ScreenNode,on screen:DeviceScreen)async throws{
         guard canAct() else{throw DeviceDriverError.notDispatched}
         guard screen.bundle==expectedBundle,target.rect.isInside(width:screen.width,height:screen.height),!screen.nodes.contains(where:{$0.type=="XCUIElementTypeAlert"}) else{throw DeviceDriverError.notDispatched}
-        let isClose=DeviceScreenRules.closeTarget(screen)==target
-        if !isClose{guard case .click(_,let fresh)=DeviceScreenRules.classify(screen,expectedBundle:expectedBundle),fresh.rect.near(target.rect),fresh.labels.contains(where:{target.labels.map(DeviceScreenRules.normalize).contains(DeviceScreenRules.normalize($0))}) else{throw DeviceDriverError.notDispatched}}
+        guard case .click(_,let fresh)=DeviceScreenRules.classify(screen,expectedBundle:expectedBundle),fresh.rect.near(target.rect),fresh.labels.contains(where:{target.labels.map(DeviceScreenRules.normalize).contains(DeviceScreenRules.normalize($0))}) else{throw DeviceDriverError.notDispatched}
         let matches=screen.nodes.filter{$0.type==target.type && $0.enabled && $0.rect.near(target.rect) && $0.labels.contains(where:{target.labels.contains($0)})}
         guard matches.count==1,canAct() else{throw DeviceDriverError.notDispatched}
         // Revalidated exact target; never blind fixed coordinates or coupon redemption.
         guard try await active()==expectedBundle,canAct() else{throw DeviceDriverError.notDispatched}
         invalidateObservation()
         _=try await request("POST",route("wda/tap"),["x":target.rect.x+target.rect.width/2,"y":target.rect.y+target.rect.height/2])
-        if !isClose{lastDrawAck=ProcessInfo.processInfo.systemUptime}
+        lastDrawAck=ProcessInfo.processInfo.systemUptime
     }
     // Path availability is relevant to LINE. A HEAD to the catalog host on every
     // poll used to serialize unrelated Internet requests with screen inspection.

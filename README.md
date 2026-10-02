@@ -2,7 +2,9 @@
 
 原生 iPhone LINE 抽選工具，採 SwiftUI 與 iOS 27 Liquid Glass。同步活動清單、依地區與狀態多選篩選、依序抽選，並在手機保存參加紀錄。**LineDraw 無網站登入、無 VIP 驗證；LINE 本身仍須先登入。**
 
-目前版本：**1.1.0（build 15），實驗版本**。教學更新：**2026/09/30**。自有程式碼採 **PolyForm Noncommercial 1.0.0**，限非商業使用；第三方元件保留各自授權。
+目前版本：**1.1.0（build 16），實驗版本**。教學更新：**2026/10/02**。自有程式碼採 **PolyForm Noncommercial 1.0.0**，限非商業使用；第三方元件保留各自授權。
+
+build 16 修正系統進度遮住關閉鈕而停止的問題：抽選指令成功回應並保存紀錄後，直接開下一筆網址，不再關閉舊券或收合動態島。詳見[修正與實機驗證](ios-app/docs/DIRECT_LINK_BUILD16_2026-10-02.md)。
 
 <p>
   <img src="ios-app/docs/screenshots/catalog-selected-light.png" width="250" alt="離線示範的抽選清單與玻璃分頁列">
@@ -533,13 +535,15 @@ git pull --ff-only
 
 Mac 配對碼有時效，不要公開分享。控制面板與 Appium 只供本機使用，不需要開路由器連接埠。兩種模式不要同時啟動自動化工作階段。
 
-Mac 原型內建五筆是歷史清單，**不是目前 iPhone App 的 build 15 五筆**；不要拿原型的過期活動當成目前抽選失敗的證據。
+Mac 原型內建五筆是歷史清單，**不是目前 iPhone App 沿用的 build 15 五筆**；不要拿原型的過期活動當成目前抽選失敗的證據。
 
 <a id="project-info"></a>
 
 ## 18. 驗證範圍、原始碼與授權
 
 目前以 Xcode 27、iOS 27 開發；Rust bridge 支援 arm64 iPhone 與 Apple Silicon 模擬器。指定 iPhone 已完成手機配對、拔線後 20 次操作及重開機後啟動檢查。其他機型、系統版本與大量長時間批次仍需驗證。
+
+build 16 的 Core 94 項測試及五筆已抽過活動的實機換頁複查均通過，包含中獎與未中獎；未重新送出真實抽選，詳見[本次驗證](ios-app/docs/DIRECT_LINK_BUILD16_2026-10-02.md)。
 
 build 14 的本機 Core 測試、LINE 已抽頁面複查及受控原生／OCR 測試詳見[驗證報告](ios-app/docs/DIRECT_HANDOFF_BUILD14_2026-09-29.md)。build 15 僅更新五連結測試清單；未以這五筆新券量測真實抽選速度，詳見[清單更新](ios-app/docs/TEST_LINKS_BUILD15_2026-09-29.md)。2026/09/29 公開來源整理時，Swift Core 93 項及 Mac Node 63 項本機測試通過；這不代表所有 LINE 實機情境皆通過。
 
@@ -563,4 +567,4 @@ docs/BUILDING.md           開發者建置索引與本機驗證命令
 
 本倉庫包含 iOS 與 Mac 輔助程式來源。Android、網站後端、個人簽章、配對憑證、實機原始資料、Apple DDI 及建置產物不在此來源發行中。
 
-本教學的下載連結與環境規則於 2026/09/30 核對 Apple、LocalDevVPN、Homebrew、Rust 官方資料；App 的按鈕名稱、腳本與設定對應本倉庫 build 15。完整初次安裝是否能在你的裝置通過，仍以各步驟的實際結果為準。
+本教學的下載連結與環境規則於 2026/09/30 核對 Apple、LocalDevVPN、Homebrew、Rust 官方資料；App 的按鈕名稱、腳本與設定對應本倉庫 build 16。完整初次安裝是否能在你的裝置通過，仍以各步驟的實際結果為準。

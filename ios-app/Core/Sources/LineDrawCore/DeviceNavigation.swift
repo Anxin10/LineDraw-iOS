@@ -1,82 +1,44 @@
 import Foundation
 
-/// A URL acknowledgement or changed result text alone cannot prove navigation.
-/// Without document identity, require observing the coupon actually absent.
+/// 深連結成功送出後確認畫面就緒。LINE 可能在同一個 WebView 內換頁，
+/// 不提供網址或關閉動畫，因此換頁不能依賴可能被系統進度遮住的關閉鈕。
+/// 沒有頁面網址時，以有限的畫面觀察判斷就緒，不代表已證實優惠券身分；
+/// 載入期限仍由批次流程管理。
 public struct DeviceNavigationGuard:Sendable {
     public let expectedBundle:String
     public let targetURL:String
     public private(set) var verified=false
-    public init(expectedBundle:String,targetURL:String,closed:Bool=false){self.expectedBundle=expectedBundle;self.targetURL=targetURL;verified=closed}
-    public mutating func observe(_ screen:DeviceScreen)->Bool {
-        guard screen.bundle==expectedBundle else{return false}
+    public private(set) var confirmation="pending"
+    private var openedAt:TimeInterval?
+    private var candidate=""
+    private var candidateAt:TimeInterval=0
+    public init(expectedBundle:String,targetURL:String){self.expectedBundle=expectedBundle;self.targetURL=targetURL}
+    /// 只在 WDA 成功回應開網址指令後呼叫，不能在送出前啟用。
+    public mutating func didOpen(at now:TimeInterval){
+        openedAt=now;verified=false;confirmation="pending";candidate="";candidateAt=0
+    }
+    public mutating func observe(_ screen:DeviceScreen,at now:TimeInterval=ProcessInfo.processInfo.systemUptime)->Bool {
+        guard let openedAt,now>=openedAt,screen.bundle==expectedBundle,
+              screen.width.isFinite,screen.height.isFinite,screen.width>0,screen.height>0,
+              !screen.nodes.contains(where:{$0.type=="XCUIElementTypeAlert"}) else{candidate="";return false}
+        // LINE 若提供完整活動網址，明確不同的優惠券不能靠等待時間
+        // 或相同按鈕文字通過檢查。
+        let documents=screen.nodes.filter{$0.type=="XCUIElementTypeWebView"}
+            .flatMap(\.labels).compactMap{LinkPolicy.canonical($0)}
+        if documents.contains(where:{$0 != targetURL}){candidate="";return false}
+        if documents.contains(targetURL){verified=true;confirmation="document";return true}
         if verified{return true}
-        guard !screen.nodes.contains(where:{$0.type=="XCUIElementTypeAlert"}) else{return false}
-        if screen.nodes.contains(where:{$0.type=="XCUIElementTypeWebView" && $0.labels.contains(targetURL)}) {
-            verified=true;return true
+        let decision=DeviceScreenRules.classify(screen,expectedBundle:expectedBundle)
+        switch decision {
+        case .click,.terminal:break
+        default:candidate="";return false
         }
-        // A sparse predicate query, an empty/error source, or a loading WebView
-        // is not evidence of dismissal. Do not confuse the old draw's result
-        // transition with a new coupon, even when both pages look identical.
-        guard !screen.targeted,screen.nodes.contains(where:{$0.type=="XCUIElementTypeApplication"}),
-              !screen.nodes.contains(where:{$0.type=="XCUIElementTypeWebView"}) else{return false}
-        // A native official-account Add Friend page is outside the coupon too.
-        // Its plain 加入好友 button must remain reachable; combined draw actions
-        // and WebViews are still treated as a coupon/loading document.
-        let couponWords=DeviceScreenRules.couponHeaders+DeviceScreenRules.submit+DeviceScreenRules.combined+DeviceScreenRules.claimed+DeviceScreenRules.participated+DeviceScreenRules.completed+["已結束","可惜...沒有抽中！"]
-        let words=Set(couponWords.map(DeviceScreenRules.normalize))
-        guard !screen.nodes.flatMap(\.labels).contains(where:{words.contains(DeviceScreenRules.normalize($0))}) else{return false}
-        verified=true
-        return true
-    }
-    public mutating func confirmedClosure(){verified=true}
-}
-
-/// A close tap acknowledgement precedes UIKit dismissal completion. Wait for
-/// fresh observations outside the coupon sheet before dispatching the next URL.
-@MainActor public enum DeviceNavigation {
-    /// Notifications can temporarily cover Close. Observe only; never dismiss
-    /// an unknown app's banner or authorize a tap from a covered screenshot.
-    public static func awaitHeaderExposure(
-        read:()async throws->(banner:ScreenRect?,headerVisible:Bool),
-        canAct:()->Bool,
-        clock:()->TimeInterval={ProcessInfo.processInfo.systemUptime},
-        sleep:(Double)async throws->Void={try await Task.sleep(for:.seconds($0))}
-    )async throws->(banner:ScreenRect?,headerVisible:Bool) {
-        let deadline=clock()+6
-        while clock()<deadline {
-            try Task.checkCancellation();guard canAct() else{throw CancellationError()}
-            let observation=try await read()
-            try Task.checkCancellation();guard canAct() else{throw CancellationError()}
-            guard clock()<deadline else{break}
-            if observation.banner != nil || observation.headerVisible{return observation}
-            try await sleep(0.35)
-        }
-        throw LineDrawError.message("優惠券頂部持續被遮擋，已停止；請收起系統橫幅後再開始。")
-    }
-    /// Exact own-title matches are supplied by OCR. Multiple completed/current
-    /// activities may share the expanded panel; swipe the first title's left
-    /// side, never the right-hand task Stop control or an unrecognized banner.
-    public static func progressBanner(_ matches:[ScreenRect],width:Double,height:Double)->ScreenRect? {
-        matches.filter{$0.isInside(width:width,height:height) && $0.y+$0.height<=height*0.18}
-            .sorted{$0.y==$1.y ? $0.x<$1.x:$0.y<$1.y}.first
-    }
-    public static func afterClosing(
-        stillVisible:()async throws->Bool,
-        canAct:()->Bool,
-        clock:()->TimeInterval={ProcessInfo.processInfo.systemUptime},
-        sleep:(Double)async throws->Void={try await Task.sleep(for:.seconds($0))}
-    )async throws {
-        let deadline=clock()+6
-        var stable=0
-        while clock()<deadline {
-            try Task.checkCancellation();guard canAct() else{throw CancellationError()}
-            let visible=try await stillVisible()
-            try Task.checkCancellation();guard canAct() else{throw CancellationError()}
-            guard clock()<deadline else{break}
-            stable=visible ? 0:stable+1
-            if stable>=2{return}
-            try await sleep(0.1)
-        }
-        throw LineDrawError.message("上一張優惠券尚未關閉，已停止；下一筆尚未開啟。請回到 LINE 關閉優惠券後再開始。")
+        // 網址回應後需跨過短暫載入期間，並取得兩次相符的新觀察。
+        // 第一個畫面的舊結果或按鈕不能直接授權操作；不做頂部 OCR、
+        // 關閉手勢或固定座標點擊。
+        let key=DeviceScreenRules.stabilityKey(screen,decision:decision)
+        if candidate != key{candidate=key;candidateAt=now;return false}
+        guard now-openedAt>=0.5,now-candidateAt>=0.2 else{return false}
+        verified=true;confirmation="settled";return true
     }
 }
