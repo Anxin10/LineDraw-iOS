@@ -6,6 +6,7 @@ const SUBMIT = ['參加抽選', '立即抽選', '挑戰抽獎', '立即抽獎', 
 const COMBINED = ['加入好友並抽選', '加入好友並抽獎', '加入好友並參加抽獎'];
 const ALREADY = ['查看已領取的優惠券', '您已參加過此抽選', '已參加過抽獎', '已抽過'];
 const RESULTS = ['恭喜中獎', '恭喜您中獎了', '恭喜獲得優惠券', '很可惜，未中獎', '未中獎', '未抽中', '銘謝惠顧', '抽選完成', '抽獎完成'];
+export const ENDED_NOTICES = ['抽獎期間已結束', '抽選期間已結束', '抽籤期間已結束'];
 const BLOCKERS = ['驗證碼', '验证码', 'CAPTCHA', '登入', '登录', '解除封鎖', '授權存取', '同意條款', '付款'];
 export const ACTION_LABELS = [...COMBINED, ...SUBMIT, '加入好友'];
 
@@ -69,7 +70,17 @@ export function classify(screen, {autoFriend = true, friendAttempted = false} = 
   const knownCoupon = has(['官方帳號優惠券', '查看我的優惠券']) ||
     matching(nodes, [...ACTION_LABELS, '查看已領取的優惠券', '已結束'], {bottom: true, height: screen.height, includeDisabled: true}).length > 0;
   if (screen.bundleId !== screen.expectedBundle) return {kind: 'pause', reason: '已離開 LINE 或出現系統畫面，請處理後恢復。'};
-  if (nodes.some(n => n.type === 'XCUIElementTypeAlert')) return {kind: 'pause', reason: 'LINE 或系統顯示對話框，請先人工處理。'};
+  const alerts=nodes.filter(n=>n.type==='XCUIElementTypeAlert');
+  const blocked=nodes.some(n=>n.type==='XCUIElementTypeSecureTextField'||n.labels.some(label=>{
+    const value=normalize(label).toLowerCase(),prompt=['XCUIElementTypeButton','XCUIElementTypeTextField','XCUIElementTypeAlert'].includes(n.type)||value.startsWith('請')||value.startsWith('请');
+    return BLOCKERS.some(word=>value===normalize(word).toLowerCase()||prompt&&value.includes(normalize(word).toLowerCase()));
+  }));
+  // 完整結束提示可略過；若另有無關提示框或驗證需求，仍交由使用者處理。
+  const ended=nodes.filter(n=>n.visible && n.rect.x>=0 && n.rect.y>=0 && n.rect.width>0 && n.rect.height>0 && n.rect.x+n.rect.width<=screen.width+1 && n.rect.y+n.rect.height<=screen.height+1 &&
+    (n.source!=='ocr'||n.confidence>=.9&&n.rect.y>=screen.height*.60) && n.labels.some(label=>ENDED_NOTICES.some(value=>normalize(value)===normalize(label))));
+  const contains=(a,b)=>b.x>=a.x&&b.y>=a.y&&b.x+b.width<=a.x+a.width+1&&b.y+b.height<=a.y+a.height+1;
+  if(ended.length&&!blocked&&alerts.every(alert=>ended.some(n=>contains(alert.rect,n.rect))))return {kind:'ended'};
+  if (alerts.length) return {kind: 'pause', reason: 'LINE 或系統顯示對話框，請先人工處理。'};
   if (knownCoupon && matching(nodes, ['已結束'], {bottom: true, height: screen.height, includeDisabled: true}).length) return {kind: 'ended'};
   // Reopening a won coupon shows its redemption button, not the result sheet.
   // Treat it as already received; this button must never become a click target.

@@ -54,8 +54,9 @@ public enum DeviceScreenRules {
     public static let claimed=["使用優惠券","查看已領取的優惠券"]
     public static let participated=["您已參加過此抽選","已參加過抽獎","已抽過"]
     public static let completed=["恭喜中獎","恭喜您中獎了","恭喜獲得優惠券","很可惜，未中獎","未中獎","未抽中","銘謝惠顧","抽選完成","抽獎完成"]
+    public static let endedNotices=["抽獎期間已結束","抽選期間已結束","抽籤期間已結束"]
     public static let blockers=["驗證碼","验证码","captcha","登入","登录","解除封鎖","授權存取","同意條款","付款"]
-    public static var observationLabels:[String]{actions+couponHeaders+claimed+participated+completed+["已結束","可惜...沒有抽中！","官方帳號","已加入好友","聊天","關閉","Close","关闭"]}
+    public static var observationLabels:[String]{actions+couponHeaders+claimed+participated+completed+endedNotices+["已結束","可惜...沒有抽中！","官方帳號","已加入好友","聊天","關閉","Close","关闭"]}
     private static let normalizedObservationLabels=Set(observationLabels.map(normalize))
     private static let normalizedBlockers=blockers.map(normalize)
     public static func isRelevant(_ text:String)->Bool {
@@ -69,7 +70,7 @@ public enum DeviceScreenRules {
         // an exact known action/result; two observations and a fresh pre-tap
         // OCR still apply. Unknown words never receive this allowance.
         guard hasCouponContext,confidence>=0.5 else{return false}
-        let allowed=actions+claimed+["已結束"]
+        let allowed=actions+claimed+endedNotices+["已結束"]
         return allowed.contains{normalize($0)==normalize(text)}
     }
     public static func stabilityKey(_ screen:DeviceScreen,decision:ScreenDecision)->String {
@@ -109,8 +110,23 @@ public enum DeviceScreenRules {
     }
     public static func classify(_ screen:DeviceScreen,expectedBundle:String=lineBundle,autoFriend:Bool=true,friendAttempted:Bool=false)->ScreenDecision{
         guard screen.bundle==expectedBundle else{return .pause("已離開 LINE 或出現系統畫面。")}
-        if screen.nodes.contains(where:{$0.type=="XCUIElementTypeAlert"}){return .pause("畫面顯示對話框，請處理後恢復。")}
         let texts=screen.nodes.flatMap(\.labels).map(normalize)
+        let alerts=screen.nodes.filter{$0.type=="XCUIElementTypeAlert"}
+        let blocked=screen.nodes.contains{node in
+            if node.type=="XCUIElementTypeSecureTextField"{return true}
+            return node.labels.contains{label in
+                let value=normalize(label).lowercased()
+                let prompt=node.type=="XCUIElementTypeButton" || node.type=="XCUIElementTypeTextField" || node.type=="XCUIElementTypeAlert" || value.hasPrefix("請") || value.hasPrefix("请")
+                return blockers.contains{word in value==normalize(word).lowercased() || (prompt && value.contains(normalize(word).lowercased()))}
+            }
+        }
+        // 完整結束提示可出現在內文或提示框；只辨識，不點確認、關閉或兌換。
+        let ended=screen.nodes.filter{node in
+            node.rect.isInside(width:screen.width,height:screen.height) && (!node.ocr || node.rect.y>=screen.height*0.60) &&
+            node.labels.contains{label in endedNotices.contains{normalize($0)==normalize(label)}}
+        }
+        if !ended.isEmpty,!blocked,alerts.allSatisfy({alert in ended.contains{alert.rect.contains($0.rect)}}){return .terminal("ENDED")}
+        if !alerts.isEmpty{return .pause("畫面顯示對話框，請處理後恢復。")}
         func has(_ labels:[String])->Bool{labels.contains{texts.contains(normalize($0))}}
         let coupon=has(couponHeaders) || !matches(screen,actions+["查看已領取的優惠券","已結束"],disabled:true).isEmpty
         if coupon {

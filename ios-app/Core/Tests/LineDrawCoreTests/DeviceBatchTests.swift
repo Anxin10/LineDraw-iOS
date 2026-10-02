@@ -159,6 +159,15 @@ final class DeviceScreenTests:XCTestCase {
         await e.run(rows,allInitial:rows,filter:CatalogFilter(),autoFriend:true,autoContinue:false)
         XCTAssertEqual(d.taps,0);XCTAssertEqual(e.progress.index,4);XCTAssertEqual(records[row(2).activityKey]?.status,"ENDED")
     }
+    func testEndedPeriodBodyAndDialogContinueToNextDrawWithoutAnyDismissTap()async{
+        let d=Driver();d.useDirectNavigation=true;d.now={self.time}
+        d.snapshots=[EndedNoticeTests.notice(),EndedNoticeTests.notice(alert:true),DeviceScreenTests().screen(["抽選"])]
+        let rows=(0..<3).map(row),e=engine(d)
+        await e.run(rows,allInitial:rows,filter:CatalogFilter(),autoFriend:true,autoContinue:false)
+        XCTAssertEqual(e.progress.state,"COMPLETED");XCTAssertEqual(e.progress.index,3)
+        XCTAssertEqual(d.opens,rows.map{$0.canonicalURL!});XCTAssertEqual(d.taps,1)
+        XCTAssertEqual(rows.map{records[$0.activityKey]?.status},["ENDED","ENDED","SUBMITTED"])
+    }
     func testUnknownTapFailureIsReviewAndNeverRetries()async{
         let d=Driver();d.snapshots=[DeviceScreenTests().screen(["抽選"])];d.tapError=DeviceDriverError.disconnected;let e=engine(d)
         await e.run([row(0),row(1)],allInitial:[row(0),row(1)],filter:CatalogFilter(),autoFriend:true,autoContinue:false)

@@ -1,4 +1,6 @@
-# LineDraw iPhone 1.1.0 build 17 — device POC
+# LineDraw iPhone 1.1.0 build 18 — device POC
+
+build 18 支援「抽獎期間已結束」的內文、停用按鈕與已知提示框，確認後接續下一筆；不點確認或兌換。詳見[修正與測試](docs/ENDED_NOTICE_BUILD18_2026-10-02.md)。
 
 build 17 修正 Funbox 純販售列造成整頁解析失敗，新增首頁「Funbox 原站／陀螺獵人」來源切換、獨立快取及同步時間。同一張券共用完成紀錄，手機自主與新版 Mac 模式都固定沿用開始時來源。詳見[更新與驗證](docs/CATALOG_SOURCES_BUILD17_2026-10-02.md)。
 

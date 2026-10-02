@@ -98,7 +98,7 @@ export class AppiumDriver {
     const screen = {bundleId: active.bundleId, expectedBundle: this.bundleId,
       nodes: native, width: rect.width, height: rect.height, xml};
     // OCR is explicitly enabled for the prototype; only run inside the intended app.
-    const hasNativeAction = native.some(n => n.labels.some(l => [...ACTION_LABELS, '查看已領取的優惠券', '已結束'].some(known => normalize(l) === normalize(known))) && n.rect.y >= rect.height * .60);
+    const hasNativeAction = classify(screen).kind === 'ended' || native.some(n => n.labels.some(l => [...ACTION_LABELS, '查看已領取的優惠券', '已結束'].some(known => normalize(l) === normalize(known))) && n.rect.y >= rect.height * .60);
     if (this.ocr && withOcr && !hasNativeAction && active.bundleId === this.bundleId) {
       const image = await this.screenshot();
       screen.nodes = [...native, ...(await this.ocr(image, rect)).filter(n => n.rect.y > 50)];

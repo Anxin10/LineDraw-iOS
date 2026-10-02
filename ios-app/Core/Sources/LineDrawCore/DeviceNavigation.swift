@@ -19,8 +19,10 @@ public struct DeviceNavigationGuard:Sendable {
     }
     public mutating func observe(_ screen:DeviceScreen,at now:TimeInterval=ProcessInfo.processInfo.systemUptime)->Bool {
         guard let openedAt,now>=openedAt,screen.bundle==expectedBundle,
-              screen.width.isFinite,screen.height.isFinite,screen.width>0,screen.height>0,
-              !screen.nodes.contains(where:{$0.type=="XCUIElementTypeAlert"}) else{candidate="";return false}
+              screen.width.isFinite,screen.height.isFinite,screen.width>0,screen.height>0 else{candidate="";return false}
+        let decision=DeviceScreenRules.classify(screen,expectedBundle:expectedBundle)
+        // 明確的結束提示框可完成換頁驗證；其他提示框仍不能當成新券就緒。
+        if screen.nodes.contains(where:{$0.type=="XCUIElementTypeAlert"}),decision != .terminal("ENDED"){candidate="";return false}
         // LINE 若提供完整活動網址，明確不同的優惠券不能靠等待時間
         // 或相同按鈕文字通過檢查。
         let documents=screen.nodes.filter{$0.type=="XCUIElementTypeWebView"}
@@ -28,7 +30,6 @@ public struct DeviceNavigationGuard:Sendable {
         if documents.contains(where:{$0 != targetURL}){candidate="";return false}
         if documents.contains(targetURL){verified=true;confirmation="document";return true}
         if verified{return true}
-        let decision=DeviceScreenRules.classify(screen,expectedBundle:expectedBundle)
         switch decision {
         case .click,.terminal:break
         default:candidate="";return false
