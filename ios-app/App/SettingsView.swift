@@ -40,7 +40,7 @@ struct SettingsView:View{
             Button{model.chooseArea(.demo);model.notice="已切換至離線示範，請回到抽選分頁。"}label:{Label("離線示範",systemImage:"play.rectangle")}.disabled(model.locked).accessibilityIdentifier("enterDemo")
             if model.area != .website{Button("返回網站清單"){model.chooseArea(.website)}.disabled(model.locked)}
         }header:{Text("測試與示範")}footer:{Text("實機測試會操作 LINE；離線示範不會。兩者的清單與紀錄均與網站分開。測試活動過期後可匯入新的 JSON 清單。")}
-        Section{NavigationLink{DiagnosticsView()}label:{Label("診斷紀錄",systemImage:"stethoscope")};NavigationLink{DeclarationView()}label:{Label("使用說明",systemImage:"doc.text")};NavigationLink{LicenseView()}label:{Label("授權與第三方元件",systemImage:"curlybraces")};Link(destination:CatalogParser.sourceURL){Label("查看來源網站",systemImage:"globe")}}
+        Section{NavigationLink{DiagnosticsView()}label:{Label("診斷紀錄",systemImage:"stethoscope")};NavigationLink{DeclarationView()}label:{Label("使用說明",systemImage:"doc.text")};NavigationLink{LicenseView()}label:{Label("授權與第三方元件",systemImage:"curlybraces")};Link(destination:model.catalogSource.pageURL){Label("查看來源網站",systemImage:"globe")}}
         Section{Text("資料保存在本機與已配對的 Mac。一般診斷不記錄聊天內容、帳號、原始畫面或抽選網址。").font(.footnote).foregroundStyle(.secondary)}
     }.navigationTitle("設定").scrollContentBackground(.hidden).background{AppBackdrop()}
         .alert("新增設定檔",isPresented:$showProfile){TextField("名稱",text:$profileName);Button("建立"){model.addProfile(profileName);profileName=""};Button("取消",role:.cancel){profileName=""}}message:{Text("每個設定檔使用獨立的本機抽選紀錄。")}

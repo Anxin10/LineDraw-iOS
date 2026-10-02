@@ -71,7 +71,9 @@ import LineDrawCore
     var accepted:Bool{data.consentVersion==UsageDeclaration.version && !fatalStorage}
     var profile:String{data.settings.profile}
     var records:[String:ParticipationRecord]{db?.records(profile:profile,area:area) ?? [:]}
-    var allDraws:[Draw]{data.draws.filter{$0.area==area}.sorted{$0.ordinal<$1.ordinal}}
+    var catalogSource:CatalogSource{data.catalog}
+    var catalogInfo:CatalogSync{data.syncInfo(for:catalogSource)}
+    var allDraws:[Draw]{data.draws.filter{$0.area==area && (area != .website || catalogSource.owns($0))}.sorted{$0.ordinal<$1.ordinal}}
     var visible:[Draw]{allDraws.filter{filter.matches($0,recorded:records[$0.activityKey]?.blocksRepeat==true,now:now)}}
     var cities:[String]{Array(Set(allDraws.filter{!$0.archived}.map(\.city))).sorted()}
     var runnable:[Draw]{visible.filter{$0.runnable(at:now) && records[$0.activityKey]?.blocksRepeat != true}}
@@ -94,15 +96,27 @@ import LineDrawCore
     }
     func chooseProfile(_ value:String){guard !locked else{return};settings{$0.profile=value};selected=[];companion=nil}
     func addProfile(_ name:String){let name=name.trimmingCharacters(in:.whitespacesAndNewlines);guard !locked,!name.isEmpty,name.count<=40,!name.hasPrefix("__") else{return};settings{if !$0.profiles.contains(name){$0.profiles.append(name)};$0.profile=name};selected=[];companion=nil}
-    func sync()async{
+    func sync(source:CatalogSource?=nil)async{
         guard accepted,!locked else{return};busy=true;syncing=true;defer{busy=false;syncing=false;syncTask=nil}
         do{
-            let selectedArea=area
-            let task=Task{switch selectedArea{case .website:return try await network.fetch();case .test:return TestCatalog.five();case .demo:return TestCatalog.demo()}}
-            syncTask=task;let rows=try await task.value;try Task.checkCancellation()
-            try db!.merge(rows,area:area);try db!.log("SYNC","清單同步完成，\(rows.count) 筆。")
-            data=db!.snapshot;selected=[];notice=area == .website ? data.syncSummary:"已載入\(area.title)"
+            let selectedArea=area;let selectedSource=source ?? catalogSource
+            let task=Task{switch selectedArea{case .website:return try await fetchCatalog(selectedSource);case .test:return TestCatalog.five();case .demo:return TestCatalog.demo()}}
+            syncTask=task;let rows=try await task.value;try Task.checkCancellation();if task.isCancelled{throw CancellationError()}
+            try db!.merge(rows,area:selectedArea,source:selectedSource,selectSource:true)
+            if source != nil{filter=CatalogFilter();companion=nil}
+            try? db!.log("SYNC","\(selectedArea == .website ? selectedSource.title:selectedArea.title)同步完成，\(rows.count) 筆。")
+            data=db!.snapshot;selected=[];notice=area == .website ? catalogInfo.summary:"已載入\(area.title)"
         }catch{if syncTask?.isCancelled==true{notice="已取消同步，保留前次清單。";return};self.error=error.localizedDescription;try? db?.log("SYNC_FAILED","同步失敗，保留前次資料。");if let db{data=db.snapshot}}
+    }
+    private func fetchCatalog(_ source:CatalogSource)async throws->[Draw]{
+        #if DEBUG
+        if isUITest{
+            if ProcessInfo.processInfo.arguments.contains("--catalog-failure"),source == .beybladeHunter{throw LineDrawError.message("測試來源同步失敗，保留前次清單。")}
+            var rows=TestCatalog.demo();for i in rows.indices{rows[i].area = .website;rows[i].id=(source == .funbox ? "fixture:":CatalogSource.hunterPrefix)+String(i)}
+            return rows
+        }
+        #endif
+        return try await network.fetch(source:source)
     }
     func cancelSync(){syncTask?.cancel()}
     func mark(_ draw:Draw){guard accepted,!locked else{return};guard draw.canonicalURL != nil else{error="連結尚未解析，請先同步後再標記完成。";return};do{try db!.manual(draw,profile:profile);data=db!.snapshot;selected.remove(draw.id)}catch{self.error=error.localizedDescription}}
@@ -145,7 +159,11 @@ import LineDrawCore
         busy=true;defer{busy=false}
         do{
             try await flushOutbox()
-            let request=CompanionStart(profile:profile,area:area,rows:allDraws.filter{!$0.archived},selectedIDs:selectedDraws.map(\.id),records:Array(records.values),filter:filter,autoFriend:data.settings.autoFriend,autoContinue:area == .website && data.settings.autoContinue)
+            if area == .website,catalogSource != .funbox{
+                let status=try await client.status(profile:profile,area:area)
+                guard status.catalogSources?.contains(catalogSource.rawValue)==true else{throw LineDrawError.message("請先更新 Mac 輔助程式，才能使用陀螺獵人來源。")}
+            }
+            let request=CompanionStart(profile:profile,area:area,rows:allDraws.filter{!$0.archived},selectedIDs:selectedDraws.map(\.id),records:Array(records.values),filter:filter,autoFriend:data.settings.autoFriend,autoContinue:area == .website && data.settings.autoContinue,catalogSource:catalogSource)
             // One request only. A transport timeout is reconciled through status, never automatically resent.
             companion=try await client.start(request);companionOnline=true;selected=[]
             try db!.log("BATCH_STARTED","使用者開始批次，\(request.selectedIDs.count) 筆。");data=db!.snapshot
@@ -206,7 +224,7 @@ import LineDrawCore
         }
     }
     func startDeviceBatch(){
-        let rows=selectedDraws;let original=allDraws;let frozenProfile=profile;let frozenArea=area;let frozenFilter=filter;let autoFriend=data.settings.autoFriend;let autoContinue=frozenArea == .website && data.settings.autoContinue
+        let rows=selectedDraws;let original=allDraws;let frozenProfile=profile;let frozenArea=area;let frozenSource=catalogSource;let frozenFilter=filter;let autoFriend=data.settings.autoFriend;let autoContinue=frozenArea == .website && data.settings.autoContinue
         guard !rows.isEmpty else{return};busy=true;deviceStage="準備啟動…";selected=[]
         deviceTask=Task{[self] in
             let runtime=deviceRuntime ?? DeviceRuntime();deviceRuntime=runtime
@@ -234,7 +252,7 @@ import LineDrawCore
                     saveBatchReport()
                     #endif
                 },fetch:{[weak self] in
-                    guard let self else{throw CancellationError()};let incoming=try await self.network.fetch();try Task.checkCancellation();try self.db!.merge(incoming,area:.website);self.data=self.db!.snapshot;return incoming
+                    guard let self else{throw CancellationError()};let incoming=try await self.fetchCatalog(frozenSource);try Task.checkCancellation();try self.db!.merge(incoming,area:.website,source:frozenSource);self.data=self.db!.snapshot;return incoming
                 })
                 deviceBatch=batch;driver.canAct={[weak self] in self?.deviceProgress.state=="RUNNING" && !Task.isCancelled}
                 busy=false;deviceStage="手機自主執行中"

@@ -30,9 +30,16 @@ public enum CatalogParser {
         for store in stores.array() {
             let name=try store.select(".draw-store-name").first()?.text().trimmingCharacters(in:.whitespacesAndNewlines) ?? ""
             let city=try store.attr("data-draw-city");let label=try store.select(".draw-start").first()?.text() ?? ""
-            let (start,end)=try DrawSchedule.parse(label);let rows=try store.select(".draw-item[data-draw-id][data-draw-href]")
-            guard !name.isEmpty,name.count<200,!rows.isEmpty(),rows.size()==(try store.select(".draw-item").size()) else{throw LineDrawError.message("店家抽選資料不完整，保留前次清單。")}
+            let (start,end)=try DrawSchedule.parse(label);let rows=try store.select(".draw-item")
+            guard !name.isEmpty,name.count<200,!rows.isEmpty() else{throw LineDrawError.message("店家抽選資料不完整，保留前次清單。")}
             for row in rows.array() {
+                // 原站也列出純販售商品；保留抽選操作標記的列仍須通過完整驗證。
+                let role=try row.attr("role");let children=try row.select("a[href], button")
+                let actionable=row.hasAttr("data-draw-id") || row.hasAttr("data-draw-href") || row.hasClass("draw-item-clickable") || row.hasAttr("onclick") || row.hasAttr("onkeydown") || role=="link" || !children.isEmpty()
+                let display=try row.select(".draw-product").first()?.text().trimmingCharacters(in:.whitespacesAndNewlines) ?? ""
+                if !actionable,!display.isEmpty,display.count<500{continue}
+                guard row.hasAttr("data-draw-id"),row.hasAttr("data-draw-href") else{throw LineDrawError.message("部分抽選列缺漏身份或網址，保留前次清單。")}
+
                 let sourceID=try row.attr("data-draw-id").trimmingCharacters(in:.whitespacesAndNewlines)
                 let url=try row.attr("data-draw-href").trimmingCharacters(in:.whitespacesAndNewlines)
                 let product=try row.select(".draw-product").first()?.text() ?? ""
@@ -65,11 +72,11 @@ public final class CatalogNetwork: NSObject, URLSessionTaskDelegate, @unchecked 
             if let canonical=LinkPolicy.canonical(next){return canonical};current=next
         };throw LineDrawError.message("抽選連結重新導向過多。")
     }
-    public func fetch() async throws -> [Draw] {
-        let (data,response)=try await get(CatalogParser.sourceURL,limit:2_000_000)
+    public func fetch(source:CatalogSource = .funbox) async throws -> [Draw] {
+        let (data,response)=try await get(source.dataURL,limit:2_000_000)
         guard response.statusCode==200,let html=String(data:data,encoding:.utf8) else{throw LineDrawError.message("同步失敗，保留前次清單。")}
-        var rows=try CatalogParser.parse(html)
-        // Four concurrent redirects, in original source order. Failed resolutions remain visible but cannot run.
+        var rows=try source.parse(html)
+        // 同時解析四個連結並保留來源順序；解析失敗的項目保持可見，但不執行。
         var resolved:[String:String]=[:];let unique=Array(Set(rows.map(\.url))).sorted()
         for offset in stride(from:0,to:unique.count,by:4){try Task.checkCancellation();let chunk=Array(unique[offset..<min(offset+4,unique.count)])
             await withTaskGroup(of:(String,String?).self){group in

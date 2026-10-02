@@ -1,14 +1,14 @@
 import {createHash} from 'node:crypto';
 import {Engine} from './engine.mjs';
 import {couponUrl} from './catalog.mjs';
-import {ready,continuationRows,fetchWebsite,WEBSITE} from './mobile-catalog.mjs';
+import {ready,continuationRows,fetchWebsite,WEBSITE,CATALOG_SOURCES} from './mobile-catalog.mjs';
 const recordKey=id=>typeof id==='string'&&/^(coupon:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+|url:[a-f0-9]{64})$/.test(id);
 const digest=s=>createHash('sha256').update(s).digest('hex');
 const blocked=status=>['SUBMITTED','COMPLETE','ALREADY','MANUAL','REVIEW','ENDED'].includes(status)||status?.endsWith('_INTENT');
 const idle=()=>({state:'IDLE',reason:'尚未開始批次。',index:0,total:0,busy:false,current:null,queue:[]});
 export class MobileController{
- constructor({store,getDriver,isLegacyBusy=()=>false,fetchCatalog=signal=>fetchWebsite(fetch,{signal}),online,engineOptions={}}){
-  Object.assign(this,{store,getDriver,isLegacyBusy,fetchCatalog,engineOptions});this.engine=null;this.worker=null;this.run=null;this.busyMutation=false;
+ constructor({store,getDriver,isLegacyBusy=()=>false,fetchCatalog=(signal,source)=>fetchWebsite(fetch,{signal,source}),online,probeFetch=fetch,engineOptions={}}){
+  Object.assign(this,{store,getDriver,isLegacyBusy,fetchCatalog,probeFetch,engineOptions});this.engine=null;this.worker=null;this.run=null;this.busyMutation=false;
   this.store.data.mobileCatalog ||= {};this.store.data.mobileUndo ||= {};this.store.data.mobileMutations ||= {};this.store.data.mobileRequests ||= {};
   this.online=online||this.probe.bind(this);this.networkAt=0;this.networkOK=true;
   // A restarted companion does not resume control, and uncertain intent records were recovered by Store.
@@ -25,7 +25,7 @@ export class MobileController{
   const catalog=this.store.data.mobileCatalog[context.scope]||{};
   const prefix=context.scope+'\n';
   const records=Object.entries(this.store.data.records).filter(([key])=>key.startsWith(prefix)).map(([key,r])=>({id:key.slice(prefix.length),product:catalog[key.slice(prefix.length)]?.product||'活動',store:catalog[key.slice(prefix.length)]?.store||'',...r}));
-  return{connected:!!this.getDriver()?.sessionId&&this.getDriver()?.udid===pair.udid,engine,records,profile:context.profile,area:context.area,round:same?this.run.round:0,diagnostics:same?this.store.data.events.filter(e=>e.at>=this.run.startedAt).slice(-100):[]};
+  return{catalogSources:Object.keys(CATALOG_SOURCES),connected:!!this.getDriver()?.sessionId&&this.getDriver()?.udid===pair.udid,engine,records,profile:context.profile,area:context.area,round:same?this.run.round:0,diagnostics:same?this.store.data.events.filter(e=>e.at>=this.run.startedAt).slice(-100):[]};
  }
  editable(){if(this.locked||this.isLegacyBusy()||this.busyMutation)throw new Error('請先停止目前批次，再變更清單或紀錄。');}
  driver(pair){const driver=this.getDriver();if(!driver?.sessionId||driver.udid!==pair.udid)throw new Error('請在 Mac 連線到配對時的 iPhone。');return driver;}
@@ -39,6 +39,7 @@ export class MobileController{
  }
  engineRows(rows){return rows.map(row=>({title:row.product,url:row.canonicalURL,startsAt:row.startsAt,endsAt:row.endsAt}));}
  start(pair,body){
+  const source=body.catalogSource ?? "funbox";if(!Object.hasOwn(CATALOG_SOURCES,source))throw new Error("不支援的清單來源。");
   const context=this.context(pair,body);if(body.accepted!==true)throw new Error('請先同意本次抽選操作。');
   if(typeof body.requestID!=='string'||!/^[a-f\d-]{36}$/i.test(body.requestID))throw new Error('缺少批次請求識別。');
   const requestKey=pair.identity+':'+body.requestID;
@@ -54,7 +55,7 @@ export class MobileController{
   const unique=new Set();const runRows=selected.filter(r=>{if(unique.has(r.activityKey)||blocked(this.store.record(context.scope,r.activityKey)?.status))return false;unique.add(r.activityKey);return true;});
   if(!runRows.length){this.store.save();throw new Error('所選活動已有紀錄，沒有可執行項目。');}
   this.store.data.mobileCatalog[context.scope]={...(this.store.data.mobileCatalog[context.scope]||{}),...Object.fromEntries(rows.map(r=>[r.activityKey,r]))};
-  this.run={...context,owner:pair.identity,requestID:body.requestID,round:0,startedAt:new Date().toISOString(),seen:new Set(rows.map(r=>r.activityKey)),filter,autoContinue:context.area==='website'&&body.autoContinue===true,autoFriend:body.autoFriend!==false};
+  this.run={...context,catalogSource:source,owner:pair.identity,requestID:body.requestID,round:0,startedAt:new Date().toISOString(),seen:new Set(rows.map(r=>r.activityKey)),filter,autoContinue:context.area==='website'&&body.autoContinue===true,autoFriend:body.autoFriend!==false};
   this.store.data.mobileRequests[requestKey]=new Date().toISOString();const keys=Object.keys(this.store.data.mobileRequests);for(const key of keys.slice(0,Math.max(0,keys.length-1000)))delete this.store.data.mobileRequests[key];
   this.store.data.mobileRun={...this.run,seen:[...this.run.seen]};this.store.save();
   this.engine=new Engine({driver,store:this.store,online:this.online,...this.engineOptions});
@@ -65,7 +66,7 @@ export class MobileController{
   await this.engine.worker;
   while(this.engine.state==='COMPLETED'&&this.run.autoContinue&&this.run.round<3){
    this.engine.state='RUNNING';this.engine.reason='本輪完成，正在同步網站新增活動。';this.store.event('CONTINUATION_SYNC');
-   this.catalogAbort=new AbortController();let rows;try{rows=await this.fetchCatalog(this.catalogAbort.signal);}catch{if(this.engine.state==='RUNNING'){this.engine.state='PAUSED';this.engine.reason='網站同步失敗，紀錄保留；可停止或稍後繼續。';}return;}
+   this.catalogAbort=new AbortController();let rows;try{rows=await this.fetchCatalog(this.catalogAbort.signal,this.run.catalogSource);}catch{if(this.engine.state==='RUNNING'){this.engine.state='PAUSED';this.engine.reason='網站同步失敗，紀錄保留；可停止或稍後繼續。';}return;}
    if(this.engine.state!=='RUNNING')return;
    const next=continuationRows(rows,{seen:this.run.seen,filter:this.run.filter,record:id=>this.store.record(this.run.scope,id)});
    for(const r of rows)this.run.seen.add(r.activityKey);this.run.round++;
@@ -94,7 +95,7 @@ export class MobileController{
   }
   this.store.data=next;this.store.save();return {ok:true};
  }
- async probe(){if(Date.now()-this.networkAt<5000)return this.networkOK;try{const r=await fetch(WEBSITE,{method:'HEAD',redirect:'error',signal:AbortSignal.timeout(4000)});this.networkOK=r.ok;await r.body?.cancel();}catch{this.networkOK=false;}this.networkAt=Date.now();return this.networkOK;}
+ async probe(){if(Date.now()-this.networkAt<5000)return this.networkOK;try{const r=await this.probeFetch(CATALOG_SOURCES[this.run?.catalogSource] || WEBSITE,{method:this.run?.catalogSource==='beybladehunter'?'GET':'HEAD',redirect:'error',signal:AbortSignal.timeout(4000)});this.networkOK=r.ok;await r.body?.cancel();}catch{this.networkOK=false;}this.networkAt=Date.now();return this.networkOK;}
  pause(){this.engine?.pause();this.catalogAbort?.abort();}
  stop(){this.engine?.stop();this.catalogAbort?.abort();}
 }

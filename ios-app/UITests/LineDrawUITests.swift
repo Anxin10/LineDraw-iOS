@@ -49,4 +49,27 @@ final class LineDrawUITests:XCTestCase {
         app.tabBars.buttons["設定"].tap();XCTAssertTrue(app.staticTexts["LineDraw"].waitForExistence(timeout:5));screenshot("settings-dark-accessibility")
         XCTAssertFalse(app.buttons["登入"].exists)
     }
+    func openWebsite(){
+        app.buttons["切換清單"].tap();app.buttons["網站抽選"].tap()
+        app.buttons["syncCatalog"].tap();XCTAssertTrue(app.buttons["detail:fixture:0"].waitForExistence(timeout:10))
+    }
+    func testCatalogSwitchSharesCompletionAndKeepsTestAreaSeparate(){
+        launch();openWebsite()
+        app.buttons["detail:fixture:0"].tap();reveal(app.buttons["markManual"]);app.buttons["markManual"].tap();app.buttons["closeDetail"].tap()
+        app.buttons["chooseCatalog"].tap();screenshot("catalog-source-picker")
+        app.buttons["catalogSource:beybladehunter"].tap()
+        let row=app.buttons["detail:catalog:beybladehunter:0"];XCTAssertTrue(row.waitForExistence(timeout:10));row.tap()
+        reveal(app.buttons["undoManual"]);XCTAssertTrue(app.buttons["undoManual"].exists);app.buttons["closeDetail"].tap()
+        screenshot("hunter-catalog")
+        app.buttons["chooseCatalog"].tap();app.buttons["catalogSource:funbox"].tap()
+        XCTAssertTrue(app.buttons["detail:fixture:0"].waitForExistence(timeout:10))
+        app.buttons["切換清單"].tap();app.buttons["五連結測試"].tap();XCTAssertFalse(app.buttons["chooseCatalog"].exists)
+    }
+    func testFailedSourceSwitchKeepsOriginalCatalog(){
+        launch(["--catalog-failure"]);openWebsite()
+        app.buttons["chooseCatalog"].tap();app.buttons["catalogSource:beybladehunter"].tap()
+        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout:10));app.alerts.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["detail:fixture:0"].exists);XCTAssertFalse(app.buttons["detail:catalog:beybladehunter:0"].exists)
+    }
+
 }

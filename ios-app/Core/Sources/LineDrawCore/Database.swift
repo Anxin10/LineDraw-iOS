@@ -18,16 +18,23 @@ public struct LocalDatabase {
         try FileManager.default.createDirectory(at:file.deletingLastPathComponent(),withIntermediateDirectories:true)
         try WireJSON.encoder().encode(candidate).write(to:file,options:.atomic);snapshot=candidate
     }
-    public mutating func merge(_ incoming:[Draw],area:DrawArea,now:Date=Date())throws{
-        guard !incoming.isEmpty, incoming.allSatisfy({$0.area==area}),Set(incoming.map(\.id)).count==incoming.count else{throw LineDrawError.message("同步清單不完整，保留前次資料。")}
+    public mutating func merge(_ incoming:[Draw],area:DrawArea,source:CatalogSource = .funbox,selectSource:Bool=false,now:Date=Date())throws{
+        let belongs:(Draw)->Bool={area == .website ? source.owns($0):$0.area==area}
+        guard (!incoming.isEmpty || (area == .website && source == .beybladeHunter)),incoming.count<=5000,incoming.allSatisfy(belongs),Set(incoming.map(\.id)).count==incoming.count else{throw LineDrawError.message("同步清單不完整，保留前次資料。")}
         var incoming=incoming
-        for i in incoming.indices where incoming[i].canonicalURL==nil{if let previous=snapshot.draws.first(where:{$0.area==area && $0.id==incoming[i].id && $0.url==incoming[i].url}),let canonical=previous.canonicalURL{incoming[i].canonicalURL=canonical;incoming[i].activityKey=previous.activityKey}}
-        let current=snapshot.draws.filter{$0.area==area && !$0.archived};let ids=Set(incoming.map(\.id));let old=Dictionary(uniqueKeysWithValues:current.map{($0.id,$0)})
+        for i in incoming.indices where incoming[i].canonicalURL==nil{if let previous=snapshot.draws.first(where:{belongs($0) && $0.id==incoming[i].id && $0.url==incoming[i].url}),let canonical=previous.canonicalURL{incoming[i].canonicalURL=canonical;incoming[i].activityKey=previous.activityKey}}
+        let current=snapshot.draws.filter{belongs($0) && !$0.archived};let ids=Set(incoming.map(\.id));let old=Dictionary(grouping:current,by:\.id)
         let added=incoming.filter{old[$0.id]==nil}.count;let removed=current.filter{!ids.contains($0.id)}.count
+        // 清單、封存、來源與同步時間一起寫入；失敗時維持原快取與原來源。
         try update{ db in
-            var archived=db.draws.filter{$0.area==area && !ids.contains($0.id)};for i in archived.indices{archived[i].archived=true}
-            db.draws=db.draws.filter{$0.area != area}+incoming+archived
-            if area == .website {db.lastSync=now;db.syncSummary="\(incoming.count) 筆 · 新增 \(added) · 封存 \(removed)"}
+            var archived=db.draws.filter{belongs($0) && !ids.contains($0.id)};for i in archived.indices{archived[i].archived=true}
+            db.draws=db.draws.filter{!belongs($0)}+incoming+archived
+            if area == .website {
+                let info=CatalogSync(lastSync:now,summary:"\(incoming.count) 筆 · 新增 \(added) · 封存 \(removed)")
+                var history=db.catalogSync ?? [:];history[source.rawValue]=info;db.catalogSync=history
+                if source == .funbox{db.lastSync=now;db.syncSummary=info.summary}
+                if selectSource{db.selectedCatalog=source}
+            }
         }
     }
     public mutating func refreshBuiltInTests()throws{

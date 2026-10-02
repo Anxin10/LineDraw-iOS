@@ -56,6 +56,13 @@ public struct DatabaseSnapshot: Codable, Sendable {
     public var version=1; public var draws: [Draw]=[]; public var records: [String:ParticipationRecord]=[:]; public var manualUndo: [String:ManualUndo]=[:]
     public var settings=AppSettings(); public var consentVersion=0; public var lastSync: Date?; public var syncSummary="尚未同步"; public var diagnostics: [Diagnostic]=[]
     public var bridgeOutbox: [RecordMutation]=[]
+    // 選用欄位讓舊版資料可直接升級；舊網站清單與同步資訊屬於 Funbox。
+    public var selectedCatalog: CatalogSource?
+    public var catalogSync: [String:CatalogSync]?
+    public var catalog: CatalogSource { selectedCatalog ?? .funbox }
+    public func syncInfo(for source:CatalogSource)->CatalogSync {
+        catalogSync?[source.rawValue] ?? CatalogSync(lastSync:source == .funbox ? lastSync:nil,summary:source == .funbox ? syncSummary:"尚未同步")
+    }
     public init() {}
 }
 public struct RecordMutation: Codable, Identifiable, Sendable {

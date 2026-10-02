@@ -27,10 +27,10 @@ public struct CompanionEngine:Codable,Sendable{
     public var locked:Bool{busy || state=="RUNNING" || state=="PAUSED"}
 }
 public struct CompanionStatus:Codable,Sendable{
-    public var connected:Bool;public var engine:CompanionEngine;public var records:[CompanionRecord];public var profile:String;public var area:String;public var round:Int;public var diagnostics:[CompanionEvent]
+    public var catalogSources:[String]?;public var connected:Bool;public var engine:CompanionEngine;public var records:[CompanionRecord];public var profile:String;public var area:String;public var round:Int;public var diagnostics:[CompanionEvent]
 }
 public struct CompanionEvent:Codable,Sendable{public var at:Date;public var code:String;public var index:Int?;public var detail:String}
 public struct CompanionStart:Codable,Sendable{
-    public var requestID:String;public var profile:String;public var area:DrawArea;public var rows:[Draw];public var selectedIDs:[String];public var records:[ParticipationRecord];public var filter:CatalogFilter;public var autoFriend:Bool;public var autoContinue:Bool;public var accepted:Bool
-    public init(profile:String,area:DrawArea,rows:[Draw],selectedIDs:[String],records:[ParticipationRecord],filter:CatalogFilter,autoFriend:Bool,autoContinue:Bool){requestID=UUID().uuidString;self.profile=profile;self.area=area;self.rows=rows;self.selectedIDs=selectedIDs;self.records=records;self.filter=filter;self.autoFriend=autoFriend;self.autoContinue=autoContinue;accepted=true}
+    public var catalogSource:CatalogSource?;public var requestID:String;public var profile:String;public var area:DrawArea;public var rows:[Draw];public var selectedIDs:[String];public var records:[ParticipationRecord];public var filter:CatalogFilter;public var autoFriend:Bool;public var autoContinue:Bool;public var accepted:Bool
+    public init(profile:String,area:DrawArea,rows:[Draw],selectedIDs:[String],records:[ParticipationRecord],filter:CatalogFilter,autoFriend:Bool,autoContinue:Bool,catalogSource:CatalogSource = .funbox){self.catalogSource=catalogSource;requestID=UUID().uuidString;self.profile=profile;self.area=area;self.rows=rows;self.selectedIDs=selectedIDs;self.records=records;self.filter=filter;self.autoFriend=autoFriend;self.autoContinue=autoContinue;accepted=true}
 }

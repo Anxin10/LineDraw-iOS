@@ -2,7 +2,7 @@ import SwiftUI
 import LineDrawCore
 struct CatalogView:View{
     @EnvironmentObject var model:AppModel
-    @State private var showFilters=false;@State private var showStart=false;@State private var detail:Draw?
+    @State private var showSources=false;@State private var showFilters=false;@State private var showStart=false;@State private var detail:Draw?
     var grouped:[String]{var values:[String]=[];for row in model.visible where !values.contains(row.store){values.append(row.store)};return values}
     var body:some View{
         NavigationStack{
@@ -10,9 +10,12 @@ struct CatalogView:View{
                 Section{
                     VStack(alignment:.leading,spacing:14){
                         AdaptiveStack{Label(model.area.title,systemImage:model.area == .website ? "globe.asia.australia":"testtube.2").font(.subheadline.weight(.medium)).foregroundStyle(.secondary);Spacer();if model.area == .demo{StatusBadge(text:"不操作 LINE",color:.purple)}}
+                        if model.area == .website{
+                            Button{showSources=true}label:{HStack{Label(model.catalogSource.title,systemImage:"globe");Spacer();Image(systemName:"chevron.up.chevron.down").font(.caption)}}.buttonStyle(.glass).disabled(model.locked).accessibilityIdentifier("chooseCatalog")
+                        }
                         HStack(alignment:.firstTextBaseline,spacing:6){Text("\(model.readyCount)").font(.system(size:48,weight:.bold,design:.rounded)).monospacedDigit();Text("筆可抽選").font(.title3).foregroundStyle(.secondary);Spacer();Image(systemName:"ticket.fill").font(.system(size:34)).foregroundStyle(.blue.gradient).rotationEffect(.degrees(-15)).accessibilityHidden(true)}
-                        AdaptiveStack{Text(model.area == .website ? model.data.syncSummary:"清單與網站紀錄分開保存").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true);Spacer();if model.busy{ProgressView();if model.syncing{Button("取消"){model.cancelSync()}}}else{Button{Task{await model.sync()}}label:{Label("同步",systemImage:"arrow.triangle.2.circlepath")}.font(.subheadline.weight(.semibold)).disabled(model.locked).accessibilityIdentifier("syncCatalog")}}
-                        if let date=model.data.lastSync,model.area == .website{Text("更新於 \(dateText(date)) · 台北時間").font(.caption2).foregroundStyle(.tertiary)}
+                        AdaptiveStack{Text(model.area == .website ? model.catalogInfo.summary:"清單與網站紀錄分開保存").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true);Spacer();if model.busy{ProgressView();if model.syncing{Button("取消"){model.cancelSync()}}}else{Button{Task{await model.sync()}}label:{Label("同步",systemImage:"arrow.triangle.2.circlepath")}.font(.subheadline.weight(.semibold)).disabled(model.locked).accessibilityIdentifier("syncCatalog")}}
+                        if let date=model.catalogInfo.lastSync,model.area == .website{Text("更新於 \(dateText(date)) · 台北時間").font(.caption2).foregroundStyle(.tertiary)}
                     }.padding(.vertical,8)
                 }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top:0,leading:4,bottom:10,trailing:4))
                 if model.batchTotal > 0 {Section{BatchProgressView()}.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top:0,leading:0,bottom:4,trailing:0))}
@@ -41,9 +44,39 @@ struct CatalogView:View{
             .toolbar{ToolbarItem(placement:.topBarTrailing){Menu{ForEach(DrawArea.allCases,id:\.self){area in Button{model.chooseArea(area)}label:{Label(area.title,systemImage:area==model.area ? "checkmark":"circle")}.disabled(model.locked)}}label:{Image(systemName:"rectangle.stack")}.accessibilityLabel("切換清單")}}
             .safeAreaInset(edge:.bottom){if !model.selectedDraws.isEmpty && !model.locked{AdaptiveStack{VStack(alignment:.leading,spacing:3){Text("已選 \(model.selectedDraws.count) 筆").font(.headline);Text(model.area == .demo ? "離線示範":"按清單順序執行").font(.caption).foregroundStyle(.secondary)};Spacer();Button{showStart=true}label:{Label(model.area == .demo ? "開始示範":"開始抽選",systemImage:"play.fill")}.buttonStyle(.glassProminent).controlSize(.large).accessibilityIdentifier("startBatch")}.padding(14).glassPanel().padding(.horizontal,16).padding(.bottom,8)}}
             .sheet(isPresented:$showFilters){FilterSheet()}
+            .sheet(isPresented:$showSources){CatalogSourceSheet()}
             .sheet(item:$detail){draw in DrawDetail(draw:draw)}
             .confirmationDialog("開始處理 \(model.selectedDraws.count) 筆活動？",isPresented:$showStart,titleVisibility:.visible){Button(model.area == .demo ? "開始離線示範":"開始本次抽選"){Task{await model.start()}}.accessibilityIdentifier("confirmStart");Button("取消",role:.cancel){}}message:{Text(model.area == .demo ? "不會開啟 LINE，也不會送出真實抽選。":"請確認手機目前的 LINE 帳號正確。\(model.data.settings.autoFriend ? "必要時會加入店家好友。":"需要加好友時會暫停。")\(model.startInstructions)")}
         }
+    }
+}
+struct CatalogSourceSheet:View{
+    @EnvironmentObject var model:AppModel
+    @Environment(\.dismiss) var dismiss
+    var body:some View{
+        NavigationStack{
+            List{
+                Section{
+                    ForEach(CatalogSource.allCases){source in
+                        Button{
+                            dismiss()
+                            Task{await model.sync(source:source)}
+                        }label:{
+                            HStack{
+                                VStack(alignment:.leading,spacing:5){
+                                    Text(source.title).foregroundStyle(.primary)
+                                    Text(source.pageURL.host ?? "").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if source==model.catalogSource{Image(systemName:"checkmark").foregroundStyle(.blue)}
+                            }
+                        }.disabled(model.locked).accessibilityIdentifier("catalogSource:\(source.rawValue)")
+                    }
+                }footer:{Text("切換時會同步所選網站；同步失敗會保留原清單。同一張抽選券的完成紀錄共用，測試清單分開保存。")}
+            }
+            .navigationTitle("抽選來源").navigationBarTitleDisplayMode(.inline)
+            .toolbar{ToolbarItem(placement:.confirmationAction){Button("完成"){dismiss()}}}
+        }.presentationDetents([.medium,.large])
     }
 }
 struct DrawRow:View{

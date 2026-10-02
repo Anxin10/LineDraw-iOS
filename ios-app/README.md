@@ -1,4 +1,6 @@
-# LineDraw iPhone 1.1.0 build 16 — device POC
+# LineDraw iPhone 1.1.0 build 17 — device POC
+
+build 17 修正 Funbox 純販售列造成整頁解析失敗，新增首頁「Funbox 原站／陀螺獵人」來源切換、獨立快取及同步時間。同一張券共用完成紀錄，手機自主與新版 Mac 模式都固定沿用開始時來源。詳見[更新與驗證](docs/CATALOG_SOURCES_BUILD17_2026-10-02.md)。
 
 build 16 移除換頁時關閉舊優惠券、收合動態島與頂部 OCR 的流程。抽選指令成功回應並保存紀錄後，直接送出下一筆網址；LINE 沒有暴露網址時，以新的穩定畫面確認底部按鈕或結果，不要求讀到舊券關閉。系統進度遮住右上角不再因此停止。詳見[修正與驗證](docs/DIRECT_LINK_BUILD16_2026-10-02.md)。
 

@@ -16,3 +16,31 @@ test('unknown click failure remains REVIEW and cannot be resubmitted',async t=>{
 test('website parser preserves order and separates coupon-use deadline',()=>{const html='<section id="page-draws"><div class="draw-store" data-draw-city="台北市"><b class="draw-store-name">商家</b><div class="draw-start">抽選/購買時間：2026/09/28（一）10:00～2026/09/29（二）23:59</div><div class="draw-item" data-draw-id="a" data-draw-href="https://lin.ee/abc"><span class="draw-product">陀螺</span></div></div></section>';const rows=parseWebsite(html);assert.equal(rows[0].startsAt,'2026-09-28T02:00:00.000Z');assert.equal(rows[0].endsAt,'2026-09-29T15:59:00.000Z');assert.equal(rows[0].product,'陀螺');assert.deepEqual(schedule('抽選：2026/09/28 10:00｜使用期限：2026/09/29 23:59'),['2026-09-28T02:00:00.000Z',null]);assert.throws(()=>parseWebsite(html.replace('data-draw-id="a"','')));});
 test('short-link redirect never follows an external host',async()=>{const calls=[];await assert.rejects(resolveLink('https://lin.ee/abc',async url=>{calls.push(url);return new Response('',{status:301,headers:{location:'https://evil.test/x'}});}));assert.deepEqual(calls,['https://lin.ee/abc']);});
 test('stop aborts an in-flight continuation sync and unlocks the batch',async t=>{let entered;const started=new Promise(r=>entered=r);const env=setup(t,{fetchCatalog:signal=>new Promise((resolve,reject)=>{entered();signal.addEventListener('abort',()=>reject(new Error('aborted')),{once:true});})});env.controller.start(pair,{...body(),autoContinue:true});await started;env.controller.stop();await env.controller.worker;assert.equal(env.controller.locked,false);assert.equal(env.controller.engine.state,'STOPPED');assert.equal(env.taps(),1);});
+
+test('展示販售列不會阻擋有效抽選，殘缺操作列仍拒絕',()=>{
+ const sale='<div class="draw-item"><b class="draw-product">BX-37（採取上架販售）</b></div>';
+ const draw='<div class="draw-item draw-item-clickable" data-draw-id="a" data-draw-href="https://lin.ee/a"><b class="draw-product">商品</b></div>';
+ const html=rows=>'<section id="page-draws"><div class="draw-store"><b class="draw-store-name">店家</b>'+rows+'</div></section>';
+ assert.equal(parseWebsite(html(sale+draw)).length,1);assert.throws(()=>parseWebsite(html(sale)));assert.throws(()=>parseWebsite(html(draw+sale.replace('class="draw-item"','class="draw-item" onclick="go()"'))));
+});
+test('陀螺獵人使用台北時間、獨立列識別及共用券識別',async()=>{
+ const {parseHunter,fetchWebsite}=await import('../src/mobile-catalog.mjs');
+ const r={id:1,line_url:'https://liff.line.me/app/c/coupon1',store_name:'測試店',city:'台北市',product_name:'商品',start_time:'2026-10-02 11:00:00',end_time:'2026-10-03 21:00:00'};
+ const rows=parseHunter(JSON.stringify({draws:[r]}));assert.equal(rows[0].startsAt,'2026-10-02T03:00:00.000Z');assert.equal(rows[0].activityKey,'coupon:app:coupon1');assert(rows[0].id.startsWith('catalog:beybladehunter:'));
+ assert.deepEqual(parseHunter('{"draws":[]}'),[]);assert.throws(()=>parseHunter('{}'));
+ for(const change of [{id:true},{id:1.5},{id:'01'},{start_time:'2026-02-30 10:00:00'},{line_url:'https://evil.test/a'}])assert.throws(()=>parseHunter(JSON.stringify({draws:[{...r,...change}]})));
+ const calls=[];await fetchWebsite(async url=>{calls.push(url);return new Response(JSON.stringify({draws:[r]}));},{source:'beybladehunter'});assert.deepEqual(calls,['https://beybladehunter.com/api/funbox/data']);
+ await assert.rejects(fetchWebsite(()=>{throw new Error('不應連線');},{source:'__proto__'}));
+});
+test('Mac 自動接續固定使用開始批次時選擇的來源',async t=>{
+ const calls=[];const env=setup(t,{fetchCatalog:async(signal,source)=>{calls.push(source);return[row(1)];}});
+ const b={...body(),autoContinue:true,catalogSource:'beybladehunter'};
+ env.controller.start(pair,b);await env.controller.worker;assert.deepEqual(calls,['beybladehunter']);assert.equal(env.taps(),1);assert.deepEqual(env.controller.view(pair,b).catalogSources,['funbox','beybladehunter']);
+ assert.throws(()=>env.controller.start(pair,{...body(),catalogSource:'unknown'}));
+});
+
+test('陀螺獵人網路檢查使用 GET，避免 HEAD 404 誤判離線',async t=>{
+ const calls=[];const env=setup(t,{probeFetch:async(url,options)=>{calls.push([url,options.method]);return new Response('{}',{status:200});}});
+ env.controller.run={catalogSource:'beybladehunter'};assert.equal(await env.controller.probe(),true);
+ assert.deepEqual(calls,[['https://beybladehunter.com/api/funbox/data','GET']]);
+});

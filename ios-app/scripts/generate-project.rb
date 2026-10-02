@@ -24,7 +24,7 @@ pkg=project.new(Xcodeproj::Project::Object::XCLocalSwiftPackageReference);pkg.re
 product=project.new(Xcodeproj::Project::Object::XCSwiftPackageProductDependency);product.product_name='LineDrawCore';product.package=pkg;app.package_product_dependencies<<product
 buildfile=project.new(Xcodeproj::Project::Object::PBXBuildFile);buildfile.product_ref=product;app.frameworks_build_phase.files<<buildfile
 app.build_configurations.each do |config|
- config.build_settings.merge!({'PRODUCT_BUNDLE_IDENTIFIER'=>'com.beybladehunter.linedraw.ios','SWIFT_VERSION'=>'5.0','GENERATE_INFOPLIST_FILE'=>'NO','INFOPLIST_FILE'=>'App/Info.plist','TARGETED_DEVICE_FAMILY'=>'1,2','CODE_SIGN_STYLE'=>'Automatic','MARKETING_VERSION'=>'1.1.0','CURRENT_PROJECT_VERSION'=>'16','ASSETCATALOG_COMPILER_APPICON_NAME'=>'AppIcon','ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME'=>'AccentColor','SWIFT_EMIT_LOC_STRINGS'=>'YES','SUPPORTS_MACCATALYST'=>'NO','ENABLE_USER_SCRIPT_SANDBOXING'=>'YES','EXCLUDED_ARCHS[sdk=iphonesimulator*]'=>'x86_64'})
+ config.build_settings.merge!({'PRODUCT_BUNDLE_IDENTIFIER'=>'com.beybladehunter.linedraw.ios','SWIFT_VERSION'=>'5.0','GENERATE_INFOPLIST_FILE'=>'NO','INFOPLIST_FILE'=>'App/Info.plist','TARGETED_DEVICE_FAMILY'=>'1,2','CODE_SIGN_STYLE'=>'Automatic','MARKETING_VERSION'=>'1.1.0','CURRENT_PROJECT_VERSION'=>'17','ASSETCATALOG_COMPILER_APPICON_NAME'=>'AppIcon','ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME'=>'AccentColor','SWIFT_EMIT_LOC_STRINGS'=>'YES','SUPPORTS_MACCATALYST'=>'NO','ENABLE_USER_SCRIPT_SANDBOXING'=>'YES','EXCLUDED_ARCHS[sdk=iphonesimulator*]'=>'x86_64'})
  config.build_settings['SWIFT_ACTIVE_COMPILATION_CONDITIONS']='DEBUG $(inherited)' if config.name=='Debug'
 end
 # Live Activity keeps the one-time PIN readable while the user enters it in Settings.
@@ -34,7 +34,7 @@ widget=project.new_target(:app_extension,'PairingActivity',:ios,'27.0')
 wg=project.main_group.new_group('PairingActivity','PairingActivity')
 widget.source_build_phase.add_file_reference(wg.new_file('PairingActivity.swift'))
 widget.source_build_phase.add_file_reference(attrs)
-widget.build_configurations.each{|c|c.build_settings.merge!({'PRODUCT_BUNDLE_IDENTIFIER'=>'com.beybladehunter.linedraw.ios.PairingActivity','SWIFT_VERSION'=>'5.0','GENERATE_INFOPLIST_FILE'=>'NO','INFOPLIST_FILE'=>'PairingActivity/Info.plist','TARGETED_DEVICE_FAMILY'=>'1,2','CODE_SIGN_STYLE'=>'Automatic','MARKETING_VERSION'=>'1.1.0','CURRENT_PROJECT_VERSION'=>'16','APPLICATION_EXTENSION_API_ONLY'=>'YES','SKIP_INSTALL'=>'YES','EXCLUDED_ARCHS[sdk=iphonesimulator*]'=>'x86_64'})}
+widget.build_configurations.each{|c|c.build_settings.merge!({'PRODUCT_BUNDLE_IDENTIFIER'=>'com.beybladehunter.linedraw.ios.PairingActivity','SWIFT_VERSION'=>'5.0','GENERATE_INFOPLIST_FILE'=>'NO','INFOPLIST_FILE'=>'PairingActivity/Info.plist','TARGETED_DEVICE_FAMILY'=>'1,2','CODE_SIGN_STYLE'=>'Automatic','MARKETING_VERSION'=>'1.1.0','CURRENT_PROJECT_VERSION'=>'17','APPLICATION_EXTENSION_API_ONLY'=>'YES','SKIP_INSTALL'=>'YES','EXCLUDED_ARCHS[sdk=iphonesimulator*]'=>'x86_64'})}
 app.add_dependency(widget)
 embed=app.new_copy_files_build_phase('Embed App Extensions');embed.dst_subfolder_spec='13';embed.add_file_reference(widget.product_reference)
 ui=project.new_target(:ui_test_bundle,'LineDrawUITests',:ios,'27.0');ui.add_dependency(app)
