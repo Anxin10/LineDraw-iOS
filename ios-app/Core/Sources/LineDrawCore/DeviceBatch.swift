@@ -153,6 +153,7 @@ public struct DeviceWorkProgress:Sendable {
             progress.reason="開啟第 \(progress.index+1) 筆\(attempt==1 ? "（重新載入）":"")";publish()
             var baseline=try await open(url)
             var stable="";var stability=0;var reopened=false
+            var systemForegroundSince:TimeInterval?
             while clock()<deadline {
                 try await gate();if skip{skip=false;if read(row.activityKey)==nil{try save(row,"SKIPPED","使用者略過。")};return}
                 try await awaitNetwork();try check();guard clock()<deadline else{break}
@@ -175,7 +176,18 @@ public struct DeviceWorkProgress:Sendable {
                 guard clock()<deadline else{trace("deadlineAfterQuery",.wait);break}
                 if stopped || Task.isCancelled{trace("cancelledAfterQuery",.wait)}
                 try check()
-                if screen.bundle=="com.apple.springboard"{trace("systemForeground",.wait);stable="";stability=0;try await sleep(0.2);continue}
+                if screen.bundle=="com.apple.springboard"{
+                    let since=systemForegroundSince ?? clock();systemForegroundSince=since
+                    let recovering=clock()-since>=2
+                    trace(recovering ? "systemForegroundRecovery":"systemForeground",.wait)
+                    stable="";stability=0
+                    if recovering,progress.reason != "系統畫面在前景，等待返回抽選頁面…"{progress.reason="系統畫面在前景，等待返回抽選頁面…";publish()}
+                    // Brief handoffs retain fast polling. A sustained system overlay
+                    // cannot authorize a tap; reduce empty reads without reopening
+                    // the coupon, extending its deadline, or advancing its cursor.
+                    try await sleep(recovering ? 1:0.2);continue
+                }
+                systemForegroundSince=nil
                 let decision=DeviceScreenRules.classify(screen,expectedBundle:expectedBundle,autoFriend:autoFriend,friendAttempted:friend)
                 if screen.navigationPending {
                     if screen.bundle != expectedBundle{trace("foreignForeground",decision)}

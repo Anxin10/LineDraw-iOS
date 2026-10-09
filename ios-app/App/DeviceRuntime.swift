@@ -16,6 +16,25 @@ import LineDrawDeviceBridge
     private var lastWorkPublish:TimeInterval=0
     private var lastTaskTitle=""
     private var lastTaskSubtitle=""
+    private(set) var titleUpdates=0
+    private(set) var titleUpdateSeconds:Double=0
+    var performanceEnvironment:[String:Any]{
+        ["thermalState":ProcessInfo.processInfo.thermalState.rawValue,
+         "lowPowerMode":ProcessInfo.processInfo.isLowPowerModeEnabled,
+         "applicationState":UIApplication.shared.applicationState.rawValue,
+         "titleUpdates":titleUpdates,"titleUpdateSeconds":titleUpdateSeconds]
+    }
+    var performanceSummary:String{
+        let thermal:String
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal:thermal="nominal"
+        case .fair:thermal="fair"
+        case .serious:thermal="serious"
+        case .critical:thermal="critical"
+        @unknown default:thermal="unknown"
+        }
+        return "thermal=\(thermal)；lowPower=\(ProcessInfo.processInfo.isLowPowerModeEnabled)；titleUpdates=\(titleUpdates)／\(String(format:"%.4f",titleUpdateSeconds)) 秒"
+    }
     private(set) var lastCode="NOT_STARTED"
     var cancellationSource:String {expired ? "backgroundTask":userCancelled ? "appStop":"taskCancellation"}
     var cancellationMessage:String {expired ? "iOS 背景工作已結束，已停止；可能由系統或系統工作進度取消。":userCancelled ? "已依使用者操作停止。":"執行已取消。"}
@@ -53,7 +72,7 @@ import LineDrawDeviceBridge
     private func startOnce(onStage:@escaping(String)->Void)async throws->LocalWDA{
         guard UIApplication.shared.applicationState == .active else{throw LineDrawError.message("請回到 App 按下開始。")}
         guard let bytes=try DeviceSecrets.load() else{throw LineDrawError.message("請先在「手機自主模式」完成手機配對。")}
-        expired=false;userCancelled=false;work=DeviceWorkProgress();lastWorkPublish=0;lastTaskTitle="";lastTaskSubtitle="";lastCode="PREPARING";requested=true
+        expired=false;userCancelled=false;work=DeviceWorkProgress();lastWorkPublish=0;lastTaskTitle="";lastTaskSubtitle="";titleUpdates=0;titleUpdateSeconds=0;lastCode="PREPARING";requested=true
         let request=BGContinuedProcessingTaskRequest(identifier:Self.taskID,title:"LineDraw 抽選",subtitle:"準備手機自主執行")
         request.strategy = .fail
         do{
@@ -93,14 +112,21 @@ import LineDrawDeviceBridge
         }catch{await stop(success:false);throw error}
     }
     func report(_ p:DeviceBatchProgress){
-        if p.total>0 {
+        var updateCount=true
+        #if DEBUG
+        // Controlled Safari fixture comparison only; normal draws always show count.
+        if ProcessInfo.processInfo.arguments.contains("--device-speed"),ProcessInfo.processInfo.arguments.contains("--fixture-static-island"){updateCount=false}
+        #endif
+        if p.total>0,updateCount {
             let finished=min(max(p.index,0),p.total)
             let remaining=p.total-finished
             let title="LineDraw · 剩餘 \(remaining) 筆"
             let state=p.state=="PAUSED" ? " · 已暫停":p.state=="STOPPED" || p.state=="STOPPING" ? " · 已停止":""
             let subtitle="已完成 \(finished) / \(p.total)\(state)"
             if title != lastTaskTitle || subtitle != lastTaskSubtitle {
+                let began=ProcessInfo.processInfo.systemUptime
                 background?.updateTitle(title,subtitle:subtitle)
+                titleUpdates+=1;titleUpdateSeconds+=ProcessInfo.processInfo.systemUptime-began
                 lastTaskTitle=title;lastTaskSubtitle=subtitle
             }
         }

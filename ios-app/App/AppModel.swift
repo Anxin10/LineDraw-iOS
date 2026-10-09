@@ -438,6 +438,7 @@ import LineDrawCore
                 })
                 deviceBatch=batch;driver.canAct={[weak self] in self?.deviceProgress.state=="RUNNING" && !Task.isCancelled}
                 busy=false;deviceStage="手機自主執行中"
+                try? db?.log("DEVICE_RUNTIME_ENV",runtime.performanceSummary)
                 let queueBegan=ProcessInfo.processInfo.systemUptime
                 await batch.run(rows,allInitial:original,filter:frozenFilter,autoFriend:autoFriend,autoContinue:continueBatch)
                 #if DEBUG
@@ -460,7 +461,7 @@ import LineDrawCore
                 if deviceProgress.state=="STOPPED" {
                     notice="批次已停止：\(deviceProgress.index)/\(deviceProgress.total)。\(stopReason)；可重新選取未完成活動開始。"
                 }
-                try db!.log("DEVICE_BATCH_FINISHED","狀態 \(deviceProgress.state)；完成位置 \(deviceProgress.index) / \(deviceProgress.total)；runtime=\(runtime.lastCode)；取消來源=\(Task.isCancelled ? runtime.cancellationSource:"none")。\(stopReason)")
+                try db!.log("DEVICE_BATCH_FINISHED","狀態 \(deviceProgress.state)；完成位置 \(deviceProgress.index) / \(deviceProgress.total)；runtime=\(runtime.lastCode)；取消來源=\(Task.isCancelled ? runtime.cancellationSource:"none")。\(stopReason)；\(runtime.performanceSummary)")
                 data=db!.snapshot
                 let source=driver.timings["GET source"] ?? [:]
                 try? db?.log("DEVICE_TIMING","佇列 \(String(format:"%.2f",duration)) 秒；讀取畫面 \(Int(source["count"] ?? 0)) 次／\(String(format:"%.2f",source["seconds"] ?? 0)) 秒。")
@@ -507,12 +508,20 @@ import LineDrawCore
             defer{try? FileManager.default.removeItem(at:probeFile.deletingLastPathComponent())}
             let faultMode=args.contains("--fixture-timeout-once") ? "timeoutOnce":args.contains("--fixture-cancel-read") ? "cancelRead":"none"
             var faultInjected=false
+            var reportWrites=0;var reportWriteSeconds=0.0;var environmentChanges=[[String:Any]]()
             @MainActor func save(_ status:String,_ details:String=""){
+                let reportBegan=ProcessInfo.processInfo.systemUptime
+                defer{reportWrites+=1;reportWriteSeconds+=ProcessInfo.processInfo.systemUptime-reportBegan}
+                let environment=runtime.performanceEnvironment
+                if environmentChanges.last?["thermalState"] as? Int != environment["thermalState"] as? Int || environmentChanges.last?["lowPowerMode"] as? Bool != environment["lowPowerMode"] as? Bool {
+                    var change=environment;change["elapsed"]=Date().timeIntervalSince(began);environmentChanges.append(change)
+                    if environmentChanges.count>32{environmentChanges.removeFirst(environmentChanges.count-32)}
+                }
                 let attempts=runtime.driver?.requestAttempts.map{a->[String:Any] in
                     var value:[String:Any]=["operation":a.operation,"attempt":a.attempt,"seconds":a.seconds,"timedOut":a.timedOut]
                     if let code=a.errorCode{value["errorCode"]=code};return value
                 } ?? []
-                let body:[String:Any]=["schema":4,"legacyRunnerSimulation":args.contains("--fixture-legacy-runner"),"fixtureCount":fixtureCount,"durable":durable,"build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","phase":phase,"runtimeCode":runtime.lastCode,"cancellationSource":status=="cancelled" ? runtime.cancellationSource:"none","faultMode":faultMode,"faultInjected":faultInjected,"inFlightOperation":runtime.driver?.inFlightOperation ?? "none","coldSafari":args.contains("--cold-fixture"),"requestAttempts":attempts,"fixtureRequests":fixture.requests,"status":status,"details":details,"elapsed":Date().timeIntervalSince(began),"startupSeconds":startupSeconds,"queueSeconds":queueSeconds,"completed":records.values.filter{$0.status=="SUBMITTED"}.count,"statuses":records.values.map(\.status),"acknowledged":fixture.acknowledged.sorted(),"acknowledgementCounts":fixture.acknowledgementCounts,"stages":stages,"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"foregroundBundles":runtime.driver?.foregroundBundles ?? [:],"items":measuredBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"manualWait":$0.manualWait,"status":$0.status] as [String:Any]} ?? [],"time":WireJSON.date(Date())]
+                let body:[String:Any]=["schema":4,"legacyRunnerSimulation":args.contains("--fixture-legacy-runner"),"fixtureCount":fixtureCount,"durable":durable,"staticIslandComparison":args.contains("--fixture-static-island"),"environment":environment,"environmentChanges":environmentChanges,"reportWrites":reportWrites,"reportWriteSeconds":reportWriteSeconds,"recentObservations":(try? JSONSerialization.jsonObject(with:JSONEncoder().encode(Array((measuredBatch?.observations ?? []).suffix(20))))) ?? [],"build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","phase":phase,"runtimeCode":runtime.lastCode,"cancellationSource":status=="cancelled" ? runtime.cancellationSource:"none","faultMode":faultMode,"faultInjected":faultInjected,"inFlightOperation":runtime.driver?.inFlightOperation ?? "none","coldSafari":args.contains("--cold-fixture"),"requestAttempts":attempts,"fixtureRequests":fixture.requests,"status":status,"details":details,"elapsed":Date().timeIntervalSince(began),"startupSeconds":startupSeconds,"queueSeconds":queueSeconds,"completed":records.values.filter{$0.status=="SUBMITTED"}.count,"statuses":records.values.map(\.status),"acknowledged":fixture.acknowledged.sorted(),"acknowledgementCounts":fixture.acknowledgementCounts,"stages":stages,"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"foregroundBundles":runtime.driver?.foregroundBundles ?? [:],"items":measuredBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"manualWait":$0.manualWait,"status":$0.status] as [String:Any]} ?? [],"time":WireJSON.date(Date())]
                 if let bytes=try? JSONSerialization.data(withJSONObject:body,options:.prettyPrinted){try? bytes.write(to:report,options:.atomic)}
             }
             save("running")

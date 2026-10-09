@@ -124,6 +124,16 @@ final class DeviceScreenTests:XCTestCase {
         await e.run([row(0)],allInitial:[row(0)],filter:CatalogFilter(),autoFriend:true,autoContinue:false)
         XCTAssertEqual(d.taps,0);XCTAssertEqual(records[row(0).activityKey]?.status,"ENDED")
     }
+    func testPersistentSystemForegroundBacksOffWithoutTapOrExtraOpen()async {
+        let d=Driver();var system=DeviceScreenTests().screen(["抽選"]);system.bundle="com.apple.springboard";d.snapshots=[system]
+        let e=engine(d)
+        await e.run([row(0)],allInitial:[row(0)],filter:CatalogFilter(),autoFriend:true,autoContinue:false)
+        XCTAssertEqual(d.taps,0);XCTAssertEqual(d.opens.count,1)
+        XCTAssertEqual(records[row(0).activityKey]?.status,"LOAD_TIMEOUT")
+        XCTAssertLessThanOrEqual(e.itemTimings.first!.reads,40)
+        XCTAssertLessThanOrEqual(time,31)
+        XCTAssertTrue(e.observations.contains{$0.reason=="systemForegroundRecovery"})
+    }
     func testUnrelatedTextDoesNotDelayStableTarget()async {
         let d=Driver(),ready=DeviceScreenTests().screen(["抽選"])
         var changed=ready
