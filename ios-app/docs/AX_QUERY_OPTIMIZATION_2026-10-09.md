@@ -72,6 +72,8 @@ Debug `--tap-foreground-guard` 在 Runner 明確回報支援後，將預期 bund
 
 漏抽掃描也保留逐次 `DeviceObservation`：讀取耗時、前景、換頁原因、是否仍為上一筆、決策、節點數與原生快照耗時。每筆最多 128 筆 metadata；最近 20 個掃描結果保存在手機 Documents/missed-scan-observations.json，診斷加入階段次數及 UNKNOWN 原因。Debug 報告包含同一份逐次證據。沒有追加 WDA 查詢、截圖或整頁文字；掃描仍不點擊、不改寫參加狀態。舊報告缺少 observations 仍可解碼。真實掃描中曾出現 27 次查詢／11.39 秒仍 UNKNOWN，因此必須藉逐次證據定位，不能推定全部耗時都來自快照。
 
+Funbox 唯讀稽核已有 413 個不重複活動完成檢查。其中兩筆初次 UNKNOWN，獨立重查後皆 COMPLETE（1.765 秒／1.704 秒，各查詢 3 次）。新增逐次紀錄實測捕捉到 foreignForeground → navigationPending → terminal:COMPLETE；這可解釋重查這一輪，但不能還原原先 27 次查詢。另修正掃描回傳畫面未帶上 lookupMode/navigationReason 的診斷缺漏，保留實際 AX／fallback 模式及換頁原因，不更動決策。
+
 背景工作的系統標題新增「LineDraw · 剩餘 X 筆」，副標題顯示「已完成 N / 總筆數」及暫停／停止狀態。剩餘數由已完成項目計算，每筆完成後更新，不因畫面查詢次數遞減，也不增加抽選等待。靈動島的收合樣式由 iOS 控制，可長按展開查看文字；不建立第二個重複的 Live Activity。Debug 分批漏抽掃描可指定整輪總數與起始位置，報告仍保留每批的獨立位置。
 
 設定 → 手機抽選查詢 → 抽選畫面查詢 →「直接 AX（實驗）」。漏抽掃描查詢也新增同名選項。一般啟動讀取保存的設定，不需要 Debug 快速路徑參數；既有模式維持原樣，使用者可切回「精簡決策查詢」或「相容查詢」。App 內版本修正紀錄與四個專案組態同步更新為 1.1.11（34）。

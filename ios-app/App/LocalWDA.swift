@@ -223,6 +223,8 @@ import LineDrawCore
                 screen.navigationVerified=true;screen.navigationPending=false
                 navigationCounts["scan:identity",default:0]+=1
                 lookupMode="scan:"+mode+(mode=="compact" ? ":"+lastNativeSnapshotMode:"")+"-identity"
+                screen.navigationReason="matchingScanIdentity"
+                screen.lookupMode=lookupMode
                 return screen
             default:break
             }
@@ -230,9 +232,11 @@ import LineDrawCore
         if var navigation=navigationGuard {
             screen.navigationVerified=navigation.observe(screen)
             screen.navigationPending = !screen.navigationVerified
+            screen.navigationReason=navigation.observationReason
             navigationGuard=navigation
         }
         lookupMode="scan:"+(mode=="compact" && !compactScanAvailable ? "xml-fallback":mode+(mode=="compact" ? ":"+lastNativeSnapshotMode:""))
+        screen.lookupMode=lookupMode
         return screen
     }
     private var tapForegroundGuardAvailable=false
@@ -331,9 +335,11 @@ import LineDrawCore
         if var navigation=navigationGuard {
             screen.navigationVerified=navigation.observe(screen)
             screen.navigationPending = !screen.navigationVerified
+            screen.navigationReason=navigation.observationReason
             navigationGuard=navigation
         }
         lookupMode="scan:screenshot-bottom18"
+        screen.lookupMode=lookupMode
         return screen
     }
     func snapshot()async throws->DeviceScreen{
