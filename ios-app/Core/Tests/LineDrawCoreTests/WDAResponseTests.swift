@@ -5,6 +5,13 @@ import FoundationNetworking
 #endif
 
 final class WDAResponseTests:XCTestCase {
+    func testLockedOpenURLExplainsPauseWithoutExposingRemoteMessage(){
+        let error=WDAResponseFailure(operation:"POST url",status:500,code:"unknown error",remoteMessage:"private details: unable to launch because the device is locked")
+        XCTAssertTrue(error.localizedDescription.contains("iPhone 已鎖定"))
+        XCTAssertFalse(error.localizedDescription.contains("private details"))
+        let action=WDAResponseFailure(operation:"POST wda/tap",status:500,code:"unknown error",remoteMessage:"device is locked")
+        XCTAssertFalse(action.localizedDescription.contains("請解鎖後重新開始"))
+    }
     func decode(_ body:String,status:Int=200,operation:String="GET source")throws->Any {
         try WDAResponse.decode(Data(body.utf8),response:HTTPURLResponse(url:URL(string:"http://127.0.0.1/session/test/source")!,statusCode:status,httpVersion:nil,headerFields:nil)!,operation:operation)
     }

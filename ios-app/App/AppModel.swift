@@ -311,7 +311,7 @@ import LineDrawCore
     #endif
     func startMissedScan(limit:Int?=nil){
         guard accepted,!locked,deviceMode,area != .demo else{return}
-        var candidates=visible.filter{$0.runnable(at:now)}
+        var candidates=MissedDrawScanner.candidates(visible,at:now)
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--scan-submitted-only"){let scoped=records;candidates=candidates.filter{scoped[$0.activityKey]?.status=="SUBMITTED"}}
         if ProcessInfo.processInfo.arguments.contains("--missed-scan"),let raw=ProcessInfo.processInfo.arguments.first(where:{$0.hasPrefix("--scan-offset=")}),let offset=Int(raw.dropFirst("--scan-offset=".count)){candidates=Array(candidates.dropFirst(max(0,offset)))}

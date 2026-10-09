@@ -2,6 +2,14 @@ import XCTest
 @testable import LineDrawCore
 
 @MainActor final class MissedDrawScannerTests:XCTestCase {
+    func testDeduplicatingBeforePaginationKeepsBatchCursorStable(){
+        let original=(0..<65).map{i->Draw in var d=row(i%5);d.activityKey="page-\(i)";d.id="row-\(i)";return d}
+        var aliases=original;aliases.insert(original[29],at:30);aliases.insert(original[59],at:61)
+        let candidates=MissedDrawScanner.candidates(aliases)
+        XCTAssertEqual(candidates.map(\.activityKey),original.map(\.activityKey))
+        let batches=stride(from:0,to:candidates.count,by:30).flatMap{Array(candidates.dropFirst($0).prefix(30))}
+        XCTAssertEqual(batches.map(\.activityKey),original.map(\.activityKey))
+    }
     final class Driver:DeviceDriver {
         var screens=[DeviceScreen](),taps=0,opens=0,time=0.0
         var fail=false

@@ -13,7 +13,12 @@ public struct WDAResponseFailure:LocalizedError,Sendable {
         if ["invalid session id","invalid argument","unsupported operation"].contains(code){return false}
         return [200,404,500,502,503,504].contains(status) && ["unknown error","timeout","stale element reference","no such element","no such window","invalid JSON","missing value","unexpected value","HTTP error"].contains(code)
     }
-    public var errorDescription:String?{"手機端 WDA 指令失敗（\(operation)，HTTP \(status)，\(code)）。"}
+    public var errorDescription:String?{
+        if operation=="POST url",code=="unknown error",remoteMessage.lowercased().contains("device is locked") {
+            return "iPhone 已鎖定，無法開啟活動；請解鎖後重新開始。"
+        }
+        return "手機端 WDA 指令失敗（\(operation)，HTTP \(status)，\(code)）。"
+    }
 }
 public enum WDAResponse {
     public static func decode(_ data:Data,response:URLResponse,operation:String)throws->Any {

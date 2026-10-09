@@ -17,9 +17,14 @@ public struct MissedDrawFinding:Identifiable,Sendable,Codable {
     public init(driver:any DeviceDriver,clock:@escaping()->TimeInterval={ProcessInfo.processInfo.systemUptime},sleep:@escaping(Double)async throws->Void={try await Task.sleep(for:.seconds($0))},update:@escaping(Int,Int,MissedDrawFinding?)->Void){
         self.driver=driver;self.clock=clock;self.sleep=sleep;self.update=update
     }
-    public func run(_ rows:[Draw])async throws {
+    /// Deduplicate before pagination so repeated catalog aliases cannot shift
+    /// the next batch cursor or scan the same coupon across a boundary.
+    public static func candidates(_ rows:[Draw],at now:Date=Date())->[Draw]{
         var seen=Set<String>()
-        let queue=rows.filter{$0.runnable(at:Date()) && seen.insert($0.activityKey).inserted}
+        return rows.filter{$0.runnable(at:now) && seen.insert($0.activityKey).inserted}
+    }
+    public func run(_ rows:[Draw])async throws {
+        let queue=Self.candidates(rows)
         update(0,queue.count,nil)
         for (index,row) in queue.enumerated() {
             try Task.checkCancellation()
