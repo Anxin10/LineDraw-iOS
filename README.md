@@ -2,7 +2,7 @@
 
 原生 iPhone LINE 抽選工具，採 SwiftUI 與 Liquid Glass。同步活動清單、依地區與狀態多選篩選、依序抽選，並在手機保存參加紀錄。**LineDraw 無網站登入、無 VIP 驗證；LINE 本身仍須先登入。**
 
-目前版本：**1.1.9（build 32），實驗版本**。教學更新：**2026/10/09**。自有程式碼採 **PolyForm Noncommercial 1.0.0**，限非商業使用；第三方元件保留各自授權。
+目前版本：**1.1.10（build 33），實驗版本**。教學更新：**2026/10/09**。自有程式碼採 **PolyForm Noncommercial 1.0.0**，限非商業使用；第三方元件保留各自授權。
 
 新手機先閱讀[安裝手冊](docs/INSTALL_NEW_IPHONE.md)；目前仍需 LineDraw、DeviceRunner 與 LocalDevVPN。GitHub 下載不代表 IPA 可直接安裝到所有手機。更新內容見[版本修正紀錄](ios-app/CHANGELOG.md)。
 

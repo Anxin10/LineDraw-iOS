@@ -34,7 +34,10 @@ import LineDrawDeviceBridge
             MainActor.assumeIsolated {
                 guard let self,let task=task as? BGContinuedProcessingTask,self.running else{task.setTaskCompleted(success:false);return}
                 self.background=task;task.progress.totalUnitCount=4;task.progress.completedUnitCount=0
-                task.expirationHandler={[weak self] in Task{@MainActor in self?.cancel(reason:"iOS 已結束配對工作。請回到 App 重新開始；既有配對保留。")}}
+                task.expirationHandler={[weak self,weak task] in Task{@MainActor in
+                    guard let self,let task,self.background === task else{return}
+                    self.cancel(reason:"iOS 已結束本次背景工作。")
+                }}
             }
         }
         // A previous app process may have been terminated during setup. Do not reuse its PIN.
@@ -100,7 +103,7 @@ import LineDrawDeviceBridge
                             message="配對已保存，正在準備必要檔案…";await updateActivity()
                             try await DDIManager.prepare{self.message=$0}
                             message="手機配對與必要檔案已完成。請按「檢查啟動」驗證 Runner；不會抽選。"
-                            history.append("filesReady");await finish(success:true);return
+                            history.append("filesReady");await finish(success:true,filesReady:true);return
                         case "failed","stopped":throw LineDrawError.message(Self.errorMessage(code))
                         default:throw LineDrawError.message("配對出現未知狀態，已停止。")
                         }
@@ -111,6 +114,10 @@ import LineDrawDeviceBridge
                 }
                 throw LineDrawError.message("配對已超過 4 分鐘，已關閉服務。請重新開始。")
             }catch{
+                if recordSaved {
+                    message="手機配對已完成並保存；必要檔案尚未準備完成。請回到 App 按「準備必要檔案」，不需重新配對。"
+                    await finish(success:true);return
+                }
                 outcome=error is CancellationError ? (cancellationReason == nil ? "cancelled":"systemCancelled"):"failed"
                 message=cancellationReason ?? (error is CancellationError ? "配對已取消。":error.localizedDescription)
                 message += recordSaved ? " 已完成的配對保留，可稍後準備檔案。":" 原有配對資料保留。"
@@ -140,17 +147,17 @@ import LineDrawDeviceBridge
         guard let expiresAt else{return}
         await activity?.update(ActivityContent(state:.init(pin:pin,message:message,expiresAt:expiresAt),staleDate:expiresAt))
     }
-    private func finish(success:Bool,simulated:Bool=false)async{
+    private func finish(success:Bool,simulated:Bool=false,filesReady:Bool=false)async{
         stopAdvertising();if !simulated{ld_pair_stop()};pin=nil
         if let activity{await activity.end(ActivityContent(state:.init(pin:nil,message:"配對已結束",expiresAt:Date()),staleDate:Date()),dismissalPolicy:.immediate)}
         activity=nil;liveActivityAvailable=false;expiresAt=nil
-        if success{background?.progress.completedUnitCount=4;outcome="complete"}
+        if success{background?.progress.completedUnitCount=4;outcome=filesReady ? "complete":"pairedFilesPending"}
         background?.updateTitle("LineDraw 手機配對",subtitle:success ? "配對已完成":"配對已結束")
         background?.setTaskCompleted(success:success);background=nil
         if !simulated {
             BGTaskScheduler.shared.cancel(taskRequestWithIdentifier:Self.taskID)
             // Device-side evidence only: never include PIN, peer name, UDID or credentials.
-            let report:[String:Any]=["schema":2,"at":ISO8601DateFormatter().string(from:Date()),"success":success,"recordSaved":recordSaved,"bonjourPublished":published,"stages":history,"code":lastCode,"outcome":outcome,"message":message]
+            let report:[String:Any]=["schema":3,"at":ISO8601DateFormatter().string(from:Date()),"success":success,"recordSaved":recordSaved,"filesReady":filesReady,"bonjourPublished":published,"stages":history,"code":lastCode,"outcome":outcome,"message":message]
             let url=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("phone-pairing-report.json")
             if let data=try? JSONSerialization.data(withJSONObject:report,options:[.sortedKeys]){try? data.write(to:url,options:[.atomic,.completeFileProtection])}
         }

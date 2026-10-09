@@ -51,6 +51,9 @@ struct SettingsView:View{
         }header:{Text("測試與示範")}footer:{Text("實機測試會操作 LINE；離線示範不會。兩者的清單與紀錄均與網站分開。測試活動過期後可匯入新的 JSON 清單。")}
         Section{NavigationLink{DiagnosticsView()}label:{Label("診斷紀錄",systemImage:"stethoscope")};NavigationLink{DeclarationView()}label:{Label("使用說明",systemImage:"doc.text")};NavigationLink{LicenseView()}label:{Label("授權與第三方元件",systemImage:"curlybraces")};Link(destination:CatalogParser.sourceURL){Label("查看來源網站",systemImage:"globe")}}
         Section{NavigationLink("版本修正紀錄"){List{
+            Section("1.1.10（33） · 2026/10/09"){
+                Text("配對成功但必要檔案準備中斷時，顯示配對已保存，無需重複輸入 PIN。")
+            }
             Section("1.1.9（32） · 2026/10/09"){
                 Text("公開來源識別碼改用 Anxin10，App、Runner、背景工作與 Keychain 設定同步更新；新識別碼需要重新簽署及配對。")
             }
