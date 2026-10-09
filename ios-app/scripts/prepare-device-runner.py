@@ -28,6 +28,6 @@ subprocess.run(['python3',str(root/'scripts/patch-runner-observe.py'),str(out)],
 project=out/'WebDriverAgent.xcodeproj/project.pbxproj'
 import re
 s=project.read_text();s=re.sub(r'DEVELOPMENT_TEAM = [^;]*;', 'DEVELOPMENT_TEAM = "";',s);project.write_text(s)
-ruby='''require 'xcodeproj';p=Xcodeproj::Project.open(ARGV[0]);t=p.targets.find{|x|x.name=='WebDriverAgentRunner'};t.build_configurations.each{|c|c.build_settings['PRODUCT_BUNDLE_IDENTIFIER']='com.lanxinan.linedraw.DeviceRunner';c.build_settings['CODE_SIGN_STYLE']='Automatic'};p.save'''
+ruby='''require 'xcodeproj';p=Xcodeproj::Project.open(ARGV[0]);t=p.targets.find{|x|x.name=='WebDriverAgentRunner'};t.build_configurations.each{|c|c.build_settings['PRODUCT_BUNDLE_IDENTIFIER']='com.anxin10.linedraw.DeviceRunner';c.build_settings['CODE_SIGN_STYLE']='Automatic'};p.save'''
 subprocess.run(['ruby','-e',ruby,str(out/'WebDriverAgent.xcodeproj')],check=True)
 print(out)

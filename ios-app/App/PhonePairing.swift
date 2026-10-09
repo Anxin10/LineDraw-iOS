@@ -9,7 +9,7 @@ import LineDrawDeviceBridge
 
 /// Short-lived, user-initiated pairing. No external host or USB pairing command.
 @MainActor final class PhonePairing:NSObject,ObservableObject,@preconcurrency NetServiceDelegate {
-    static let taskID="com.lanxinan.linedraw.ios.phonePairing"
+    static let taskID="com.anxin10.linedraw.ios.phonePairing"
     @Published private(set) var running=false
     @Published private(set) var message="尚未開始手機配對"
     @Published private(set) var pin:String?

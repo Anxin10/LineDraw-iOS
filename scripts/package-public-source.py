@@ -9,7 +9,7 @@ import tempfile
 import zipfile
 
 root = pathlib.Path(__file__).resolve().parents[1]
-out = root / 'ios-app/exports/github-v1.1.8'
+out = root / 'ios-app/exports/github-v1.1.9'
 out.mkdir(parents=True, exist_ok=True)
 paths = subprocess.check_output(['git', 'ls-files', '-co', '--exclude-standard', '-z'], cwd=root).decode().split('\0')
 forbidden = {'.git', '.runtime', '.build', 'exports', 'node_modules', 'target', 'xcuserdata', '__pycache__'}
@@ -41,7 +41,7 @@ p.files.select{|f|f.path.to_s.include?('BundledDDI')}.each{|f|f.remove_from_proj
             text = path.read_text(errors='replace')
             if re.search(r'DEVELOPMENT_TEAM\s*=\s*[A-Z0-9]{10}|/Users/[^/]+/', text):
                 raise SystemExit(f'Personal configuration requires review: {path.relative_to(stage)}')
-    archive = out / 'LineDraw-1.1.8-source.zip'
+    archive = out / 'LineDraw-1.1.9-source.zip'
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as package:
         for file in sorted(stage.rglob('*')):
             if file.is_file():

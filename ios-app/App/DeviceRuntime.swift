@@ -6,8 +6,8 @@ import LineDrawCore
 import LineDrawDeviceBridge
 
 @MainActor final class DeviceRuntime {
-    static let runner="com.lanxinan.linedraw.DeviceRunner.xctrunner"
-    static let taskID="com.lanxinan.linedraw.ios.deviceBatch"
+    static let runner="com.anxin10.linedraw.DeviceRunner.xctrunner"
+    static let taskID="com.anxin10.linedraw.ios.deviceBatch"
     private var background:BGContinuedProcessingTask?
     private var requested=false
     private var expired=false
@@ -123,7 +123,7 @@ import LineDrawDeviceBridge
 
 // Credentials are never stored in JSON, UserDefaults, documents, diagnostics, or exports.
 @MainActor enum DeviceSecrets {
-    static let service="com.lanxinan.linedraw.device-pairing"
+    static let service="com.anxin10.linedraw.device-pairing"
     static var query:[String:Any]{[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:"local-device"]}
     static func load()throws->Data?{var q=query;q[kSecReturnData as String]=true;var result:CFTypeRef?;let status=SecItemCopyMatching(q as CFDictionary,&result);if status==errSecItemNotFound{return nil};guard status==errSecSuccess else{throw LineDrawError.message("無法讀取配對檔。請解鎖手機。")};return result as? Data}
     static func save(_ data:Data)throws{

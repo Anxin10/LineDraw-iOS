@@ -12,6 +12,7 @@ __pycache__/
 *.app/
 *.ipa
 *.dSYM/
+*.xcarchive/
 
 # Personal IDE state
 .DS_Store

@@ -1,6 +1,6 @@
 # 新 iPhone 安裝手冊
 
-版本：LineDraw 1.1.8（31），2026/10/09。最低部署目標 iOS 26.0；iPhone 16 Pro／iOS 26.0 尚未完成本版實機驗收。手機型號相容不等於簽署允許安裝。
+版本：LineDraw 1.1.9（32），2026/10/09。最低部署目標 iOS 26.0；iPhone 16 Pro／iOS 26.0 尚未完成本版實機驗收。手機型號相容不等於簽署允許安裝。
 
 ## 準備與簽署
 
@@ -20,7 +20,7 @@ Apple 說明：[裝置註冊與 IPA 發佈](https://developer.apple.com/document
 2. 已有適用簽署的 IPA：Mac 的 Apple Configurator 選取新手機，拖入 `LineDraw.ipa` 與 `DeviceRunner.ipa`。也可直接用 Xcode 建置安裝。不能在 iPhone「檔案」App 點 IPA 完成安裝。
 3. iPhone → 設定 → 隱私權與安全性 → 開發者模式，依提示重新啟動並確認；找不到選項時先讓 Xcode 辨識手機。
 4. 若出現開發者不受信任提示，到設定 → 一般 → VPN 與裝置管理確認對應開發者。
-5. 開啟 LineDraw，設定頁與診斷頁應顯示 **1.1.8（31）**。「PolyForm Noncommercial 1.0.0」是授權版本，並非 App 舊版。
+5. 開啟 LineDraw，設定頁與診斷頁應顯示 **1.1.9（32）**。「PolyForm Noncommercial 1.0.0」是授權版本，並非 App 舊版。
 
 Apple 說明：[Configurator 加入 IPA](https://support.apple.com/en-au/guide/apple-configurator-mac/cad4cd08c03/mac)、[開發者模式](https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device)。
 
@@ -44,3 +44,7 @@ Apple 說明：[Configurator 加入 IPA](https://support.apple.com/en-au/guide/a
 | 同步清單有活動但 0 筆可抽選 | 檢查活動有效期、篩選、已送出紀錄與待確認店家 |
 
 本版不能保證每筆 3 秒內，也未提供 App Store／TestFlight 安裝。
+
+## Anxin10 識別碼更新
+
+1.1.9 使用 `com.anxin10`，主程式、extension、Runner 與背景工作識別碼必須一致。此版本需要以新識別碼重新簽署及配對，安裝後會視為另一個 App，不會自動繼承先前的本機紀錄。原有手機可繼續使用原 App，請勿刪除原 App 的資料。

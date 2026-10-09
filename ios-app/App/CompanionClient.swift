@@ -4,7 +4,7 @@ import CryptoKit
 import LineDrawCore
 
 struct KeychainStore {
-    static let service="com.lanxinan.linedraw.ios.companion"
+    static let service="com.anxin10.linedraw.ios.companion"
     static func save(_ data:Data)throws{
         let query:[String:Any]=[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:"pairing",kSecAttrSynchronizable as String:false]
         let update=SecItemUpdate(query as CFDictionary,[kSecValueData as String:data] as CFDictionary)

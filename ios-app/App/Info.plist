@@ -4,8 +4,8 @@
 <dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>com.lanxinan.linedraw.ios.deviceBatch</string>
-		<string>com.lanxinan.linedraw.ios.phonePairing</string>
+		<string>com.anxin10.linedraw.ios.deviceBatch</string>
+		<string>com.anxin10.linedraw.ios.phonePairing</string>
 	</array>
 	<key>CFBundleDisplayName</key>
 	<string>LineDraw</string>
