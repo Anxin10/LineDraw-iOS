@@ -508,9 +508,14 @@ import LineDrawCore
             defer{try? FileManager.default.removeItem(at:probeFile.deletingLastPathComponent())}
             let faultMode=args.contains("--fixture-timeout-once") ? "timeoutOnce":args.contains("--fixture-cancel-read") ? "cancelRead":"none"
             var faultInjected=false
+            var persistenceEncodeSeconds=0.0,persistenceWriteSeconds=0.0;var persistenceWrites=0;var recentPersistence=[[String:Any]]()
             var reportWrites=0;var reportWriteSeconds=0.0;var environmentChanges=[[String:Any]]()
+            let reportInterval=min(5,max(0,args.first{$0.hasPrefix("--fixture-report-interval=")}.flatMap{Double($0.dropFirst("--fixture-report-interval=".count))}.flatMap{$0.isFinite ? $0:nil} ?? 0))
+            var lastReportAt:TimeInterval=0
             @MainActor func save(_ status:String,_ details:String=""){
                 let reportBegan=ProcessInfo.processInfo.systemUptime
+                if status=="running",faultMode=="none",reportBegan-lastReportAt<reportInterval{return}
+                lastReportAt=reportBegan
                 defer{reportWrites+=1;reportWriteSeconds+=ProcessInfo.processInfo.systemUptime-reportBegan}
                 let environment=runtime.performanceEnvironment
                 if environmentChanges.last?["thermalState"] as? Int != environment["thermalState"] as? Int || environmentChanges.last?["lowPowerMode"] as? Bool != environment["lowPowerMode"] as? Bool {
@@ -521,7 +526,7 @@ import LineDrawCore
                     var value:[String:Any]=["operation":a.operation,"attempt":a.attempt,"seconds":a.seconds,"timedOut":a.timedOut]
                     if let code=a.errorCode{value["errorCode"]=code};return value
                 } ?? []
-                let body:[String:Any]=["schema":4,"legacyRunnerSimulation":args.contains("--fixture-legacy-runner"),"fixtureCount":fixtureCount,"durable":durable,"staticIslandComparison":args.contains("--fixture-static-island"),"environment":environment,"environmentChanges":environmentChanges,"reportWrites":reportWrites,"reportWriteSeconds":reportWriteSeconds,"recentObservations":(try? JSONSerialization.jsonObject(with:JSONEncoder().encode(Array((measuredBatch?.observations ?? []).suffix(20))))) ?? [],"build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","phase":phase,"runtimeCode":runtime.lastCode,"cancellationSource":status=="cancelled" ? runtime.cancellationSource:"none","faultMode":faultMode,"faultInjected":faultInjected,"inFlightOperation":runtime.driver?.inFlightOperation ?? "none","coldSafari":args.contains("--cold-fixture"),"requestAttempts":attempts,"fixtureRequests":fixture.requests,"status":status,"details":details,"elapsed":Date().timeIntervalSince(began),"startupSeconds":startupSeconds,"queueSeconds":queueSeconds,"completed":records.values.filter{$0.status=="SUBMITTED"}.count,"statuses":records.values.map(\.status),"acknowledged":fixture.acknowledged.sorted(),"acknowledgementCounts":fixture.acknowledgementCounts,"stages":stages,"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"foregroundBundles":runtime.driver?.foregroundBundles ?? [:],"items":measuredBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"manualWait":$0.manualWait,"status":$0.status] as [String:Any]} ?? [],"time":WireJSON.date(Date())]
+                let body:[String:Any]=["schema":4,"legacyRunnerSimulation":args.contains("--fixture-legacy-runner"),"fixtureCount":fixtureCount,"durable":durable,"staticIslandComparison":args.contains("--fixture-static-island"),"environment":environment,"environmentChanges":environmentChanges,"reportWrites":reportWrites,"reportWriteSeconds":reportWriteSeconds,"reportInterval":reportInterval,"persistenceEncodeSeconds":persistenceEncodeSeconds,"persistenceWriteSeconds":persistenceWriteSeconds,"persistenceWrites":persistenceWrites,"recentPersistence":recentPersistence,"recentObservations":(try? JSONSerialization.jsonObject(with:JSONEncoder().encode(Array((measuredBatch?.observations ?? []).suffix(20))))) ?? [],"build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","phase":phase,"runtimeCode":runtime.lastCode,"cancellationSource":status=="cancelled" ? runtime.cancellationSource:"none","faultMode":faultMode,"faultInjected":faultInjected,"inFlightOperation":runtime.driver?.inFlightOperation ?? "none","coldSafari":args.contains("--cold-fixture"),"requestAttempts":attempts,"fixtureRequests":fixture.requests,"status":status,"details":details,"elapsed":Date().timeIntervalSince(began),"startupSeconds":startupSeconds,"queueSeconds":queueSeconds,"completed":records.values.filter{$0.status=="SUBMITTED"}.count,"statuses":records.values.map(\.status),"acknowledged":fixture.acknowledged.sorted(),"acknowledgementCounts":fixture.acknowledgementCounts,"stages":stages,"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"foregroundBundles":runtime.driver?.foregroundBundles ?? [:],"items":measuredBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"manualWait":$0.manualWait,"status":$0.status] as [String:Any]} ?? [],"time":WireJSON.date(Date())]
                 if let bytes=try? JSONSerialization.data(withJSONObject:body,options:.prettyPrinted){try? bytes.write(to:report,options:.atomic)}
             }
             save("running")
@@ -550,7 +555,13 @@ import LineDrawCore
                 if durable{var db=try LocalDatabase(file:probeFile);try db.update{$0=self.data};probeDatabase=db}
                 let rows=(0..<fixtureCount).map{i->Draw in var row=TestCatalog.five()[i%5];row.id="probe:\(i)";row.activityKey="probe:\(i)";row.startsAt=Date().addingTimeInterval(-60);row.endsAt=Date().addingTimeInterval(3600);row.canonicalURL="https://liff.line.me/linedraw-fixture/c/speed\(i)";return row}
                 let batch=DeviceBatch(driver:driver,expectedBundle:driver.expectedBundle,read:{records[$0]},write:{row,record in
-                    if durable{try probeDatabase!.update{$0.records["speed-probe\n"+row.activityKey]=record}}
+                    if durable{
+                        try probeDatabase!.update{$0.records["speed-probe\n"+row.activityKey]=record}
+                        let timing=probeDatabase!.lastWriteTiming
+                        persistenceEncodeSeconds+=timing.encodeSeconds;persistenceWriteSeconds+=timing.writeSeconds;persistenceWrites+=1
+                        recentPersistence.append(["status":record?.status ?? "removed","encode":timing.encodeSeconds,"write":timing.writeSeconds])
+                        if recentPersistence.count>8{recentPersistence.removeFirst(recentPersistence.count-8)}
+                    }
                     records[row.activityKey]=record
                 },update:{runtime.report($0);if phase != $0.reason{phase=$0.reason;save("running")};self.deviceStage="速度驗證："+$0.reason})
                 measuredBatch=batch
