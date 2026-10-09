@@ -5,9 +5,9 @@ import sys
 def patch(root):
     path=Path(root)/'WebDriverAgentLib/Commands/FBDebugCommands.m'
     source=path.read_text()
-    if '// LineDraw compact observation v3' in source:
+    if '// LineDraw compact observation v4' in source:
         return
-    if '// LineDraw compact observation v1' in source or '// LineDraw compact observation v2' in source:
+    if any('// LineDraw compact observation v'+str(v) in source for v in [1,2,3]):
         source=source[:source.index('\n// LineDraw compact observation v')]+source[source.rfind('\n@end'):]
     headers=['FBXCAXClientProxy.h','FBXCAccessibilityElement.h','FBActiveAppDetectionPoint.h','FBXCElementSnapshotWrapper.h','FBElementTypeTransformer.h','FBCommandStatus.h','FBConfiguration.h']
     for header in headers:
@@ -19,7 +19,7 @@ def patch(root):
     if '@selector(handleLineDrawObserve:)' not in source:
         source=source.replace(anchor,anchor+'\n    [[FBRoute GET:@"/linedraw/observe"] respondWithTarget:self action:@selector(handleLineDrawObserve:)],')
     method=r'''
-// LineDraw compact observation v3: one native snapshot, no XML or screenshot.
+// LineDraw compact observation v4: optional direct AX snapshot for controlled read-only comparison.
 + (NSDictionary *)lineDrawActiveIdentity
 {
   NSArray *elements = [FBXCAXClientProxy.sharedClient activeApplications];
@@ -114,8 +114,31 @@ def patch(root):
   NSString *bundle = [self lineDrawActiveIdentity][@"bundleId"] ?: @"unknown";
   if (![bundle isEqualToString:expected]) { return FBResponseWithObject(@{@"schema": @1, @"bundleId": bundle, @"ready": @NO}); }
   NSTimeInterval began = NSProcessInfo.processInfo.systemUptime;
-  XCUIApplication *app = [[XCUIApplication alloc] initWithBundleIdentifier:bundle];
-  id<FBXCElementSnapshot> snapshot = [app fb_standardSnapshot];
+  NSString *snapshotMode = request.parameters[@"snapshot_mode"] ?: @"standard";
+  if (![@[@"standard", @"ax"] containsObject:snapshotMode]) {
+    return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:@"Invalid snapshot mode" traceback:nil]);
+  }
+  id<FBXCElementSnapshot> snapshot = nil;
+  if ([snapshotMode isEqualToString:@"ax"]) {
+    NSDictionary *identity = [self lineDrawActiveIdentity];
+    if (![identity[@"bundleId"] isEqualToString:expected]) {
+      return FBResponseWithObject(@{@"schema": @1, @"bundleId": identity[@"bundleId"] ?: @"unknown", @"ready": @NO});
+    }
+    id<FBXCAccessibilityElement> root = nil;
+    for (id<FBXCAccessibilityElement> candidate in [FBXCAXClientProxy.sharedClient activeApplications]) {
+      if (candidate.processIdentifier == [identity[@"pid"] intValue]) { root = candidate; break; }
+    }
+    NSError *error = nil;
+    if (root != nil) {
+      snapshot = [FBXCAXClientProxy.sharedClient snapshotForElement:root attributes:nil inDepth:YES error:&error];
+    }
+    if (snapshot == nil) {
+      return FBResponseWithStatus([FBCommandStatus unknownErrorWithMessage:@"Direct AX snapshot unavailable" traceback:nil]);
+    }
+  } else {
+    XCUIApplication *app = [[XCUIApplication alloc] initWithBundleIdentifier:bundle];
+    snapshot = [app fb_standardSnapshot];
+  }
   NSTimeInterval captured = NSProcessInfo.processInfo.systemUptime;
   CGRect viewport = snapshot.frame;
   if (CGRectIsEmpty(viewport) || !isfinite(viewport.origin.x) || !isfinite(viewport.origin.y) || !isfinite(viewport.size.width) || !isfinite(viewport.size.height)) {
@@ -133,7 +156,7 @@ def patch(root):
   return FBResponseWithObject(@{
     @"schema": @1, @"bundleId": bundle, @"ready": @YES,
     @"nativeSeconds": @(NSProcessInfo.processInfo.systemUptime-began),
-    @"snapshotSeconds": @(captured-began), @"collectSeconds": @(collected-captured),
+    @"snapshotMode": snapshotMode, @"snapshotSeconds": @(captured-began), @"collectSeconds": @(collected-captured),
     @"visibilityChecks": @(checks), @"geometrySkipped": @(skipped),
     @"tree": @{@"type": @"Application", @"isVisible": @YES, @"isEnabled": @YES,
       @"rect": @{@"x": @(r.origin.x), @"y": @(r.origin.y), @"width": @(r.size.width), @"height": @(r.size.height)},

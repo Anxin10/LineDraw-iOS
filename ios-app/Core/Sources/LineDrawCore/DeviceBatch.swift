@@ -44,6 +44,7 @@ public struct DeviceObservation:Sendable,Codable {
     public var targetRect:ScreenRect?
     public var nativeQuerySeconds:Double?=nil
     public var nativeMetrics:[String:Double]?=nil
+    public var decisionReason:String?=nil
 }
 /// Actual completed reads count as work even while LINE is still loading.
 /// The total is an estimate (12 reads per item), expanded when necessary;
@@ -159,15 +160,15 @@ public struct DeviceWorkProgress:Sendable {
                 let screen=try await snapshot()
                 let querySeconds=clock()-readBegan
                 func trace(_ reason:String,_ decision:ScreenDecision,stableCount:Int=0,keyChanged:Bool=false){
-                    let code:String;var rect:ScreenRect?
+                    let code:String;var rect:ScreenRect?;var decisionReason:String?
                     switch decision {
                     case .click(let action,let node):code="click:"+action;rect=node.rect
                     case .terminal(let status):code="terminal:"+status
-                    case .pause:code="pause"
+                    case .pause(let message):code="pause";decisionReason=message
                     case .wait:code="wait"
                     case .reopen:code="reopen"
                     }
-                    observations.append(DeviceObservation(item:item.index,read:item.reads,elapsed:clock()-began,querySeconds:querySeconds,reason:reason,decision:code,bundle:screen.bundle,navigationReason:screen.navigationReason,lookupMode:screen.lookupMode,pending:screen.navigationPending,verified:screen.navigationVerified,sameAsBaseline:screen.navigationFingerprint==baseline,keyChanged:keyChanged,stableCount:stableCount,nodeCount:screen.nodes.count,buttonCount:screen.nodes.filter{$0.type=="XCUIElementTypeButton" && $0.enabled}.count,targetRect:rect,nativeQuerySeconds:screen.nativeQuerySeconds,nativeMetrics:screen.nativeMetrics))
+                    observations.append(DeviceObservation(item:item.index,read:item.reads,elapsed:clock()-began,querySeconds:querySeconds,reason:reason,decision:code,bundle:screen.bundle,navigationReason:screen.navigationReason,lookupMode:screen.lookupMode,pending:screen.navigationPending,verified:screen.navigationVerified,sameAsBaseline:screen.navigationFingerprint==baseline,keyChanged:keyChanged,stableCount:stableCount,nodeCount:screen.nodes.count,buttonCount:screen.nodes.filter{$0.type=="XCUIElementTypeButton" && $0.enabled}.count,targetRect:rect,nativeQuerySeconds:screen.nativeQuerySeconds,nativeMetrics:screen.nativeMetrics,decisionReason:decisionReason))
                     if observations.count>2000{observations.removeFirst(observations.count-2000)}
                 }
                 // A slow read/recovery must not authorize a tap after the load deadline.

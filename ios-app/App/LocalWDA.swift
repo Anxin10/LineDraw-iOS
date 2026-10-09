@@ -239,6 +239,10 @@ import LineDrawCore
         let began=ProcessInfo.processInfo.systemUptime
         defer{measuredPhase("capture.compact",began)}
         var query=[URLQueryItem(name:"expected_bundle",value:expectedBundle)]
+        #if DEBUG
+        let directAX=ProcessInfo.processInfo.arguments.contains("--snapshot-ax")
+        if directAX{query.append(URLQueryItem(name:"snapshot_mode",value:"ax"))}
+        #endif
         if decisionOnly {
             let filter=["labels":DeviceScreenRules.observationLabels.map(DeviceScreenRules.normalize),"blockers":DeviceScreenRules.blockers.map{DeviceScreenRules.normalize($0).lowercased()}]
             let bytes=try JSONSerialization.data(withJSONObject:filter)
@@ -246,6 +250,9 @@ import LineDrawCore
         }
         let value=try await request("GET",route("linedraw/observe"),query:query)
         guard let envelope=value as? [String:Any],envelope["schema"] as? Int==1,let bundle=envelope["bundleId"] as? String else{throw ObservationFailure.invalidXML}
+        #if DEBUG
+        if directAX,envelope["ready"] as? Bool==true,envelope["snapshotMode"] as? String != "ax"{throw ObservationFailure.invalidXML}
+        #endif
         foregroundBundles[bundle,default:0]+=1
         guard bundle==expectedBundle,envelope["ready"] as? Bool==true else{return DeviceScreen(bundle:bundle,width:dims.width,height:dims.height,nodes:[])}
         guard let tree=envelope["tree"] as? [String:Any] else{throw ObservationFailure.invalidXML}
