@@ -68,12 +68,13 @@ import LineDrawCore
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--device-speed"){Task{try? await Task.sleep(for:.seconds(2));self.runDeviceSpeedProbe()}}
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--missed-scan"){Task{try? await Task.sleep(for:.seconds(2));self.chooseArea(.website);self.startMissedScan(limit:5)}}
             // Explicit developer launch after authorization; normal launches
-            // never submit. Limit to five runnable rows, retain repeat guards.
+            // never submit. Default five, explicit bounded limit, retain repeat guards.
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--real-speed-batch"){Task{
                 try? await Task.sleep(for:.seconds(2))
                 guard self.accepted,!self.locked,self.deviceMode else{return}
                 self.chooseArea(.website)
-                self.selected=Set(self.runnable.prefix(5).map(\.id))
+                let requested=ProcessInfo.processInfo.arguments.first{$0.hasPrefix("--speed-limit=")}.flatMap{Int($0.dropFirst("--speed-limit=".count))} ?? 5
+                self.selected=Set(self.runnable.prefix(min(30,max(1,requested))).map(\.id))
                 guard !self.selected.isEmpty else{self.notice="沒有可測試的未參加活動。";return}
                 await self.start()
             }}
@@ -287,6 +288,7 @@ import LineDrawCore
                 report["labels"]=Array(screen.nodes.flatMap(\.labels).prefix(100)).map{String($0.prefix(300))}
                 if case .pause(let message)=DeviceScreenRules.classify(screen){report["decisionReason"]=message}
                 report["status"]="read"
+                if ProcessInfo.processInfo.arguments.contains("--verify-tap-guard"){report["tapGuardRejectedInvalidTarget"]=try await driver.verifyTapGuardRejection()}
                 if let raw=try await driver.request("GET",driver.route("screenshot")) as? String,let bytes=Data(base64Encoded:raw){
                     let file=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("private-line-inspection.png")
                     try bytes.write(to:file,options:[.atomic,.completeFileProtection])

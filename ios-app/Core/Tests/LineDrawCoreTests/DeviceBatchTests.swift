@@ -6,6 +6,13 @@ final class DeviceScreenTests:XCTestCase {
         DeviceScreen(bundle:DeviceScreenRules.lineBundle,width:400,height:800,nodes:[ScreenNode(type:"XCUIElementTypeStaticText",labels:["官方帳號優惠券"],rect:.init(x:10,y:60,width:250,height:30))]+labels.enumerated().map{i,label in ScreenNode(type:"XCUIElementTypeButton",labels:[label],rect:.init(x:10+Double(i)*190,y:700,width:180,height:60),enabled:enabled)})
     }
     func testTerminalPagesNeverBecomeTapTargets(){for label in ["查看已領取的優惠券","使用優惠券","恭喜中獎","未中獎","銘謝惠顧","可惜...沒有抽中！","已結束"]{guard case .terminal = DeviceScreenRules.classify(screen([label],enabled:false)) else{return XCTFail(label)}}}
+    func testExpiredPeriodFooterEndsWithoutTapButBodyTextDoesNot(){
+        var s=screen(["抽獎期間已結束"],enabled:false)
+        XCTAssertEqual(DeviceScreenRules.classify(s),.terminal("ENDED"))
+        XCTAssertTrue(DeviceScreenRules.observationLabels.contains("抽獎期間已結束"))
+        s.nodes[1].rect.y=200;s.nodes[1].type="XCUIElementTypeStaticText"
+        XCTAssertEqual(DeviceScreenRules.classify(s),.wait)
+    }
     func testBottomOnlyAndCombinedFriend(){var s=screen(["加入好友並參加抽獎"]);guard case .click("ADD_FRIEND_AND_SUBMIT",_)=DeviceScreenRules.classify(s) else{return XCTFail()};guard case .pause=DeviceScreenRules.classify(s,autoFriend:false) else{return XCTFail()};s.nodes[1].rect.y=100;XCTAssertEqual(DeviceScreenRules.classify(s),.wait)}
     func testMultipleTargetsAndForeignAppPause(){guard case .pause=DeviceScreenRules.classify(screen(["抽選","參加抽選"])) else{return XCTFail()};var s=screen(["抽選"]);s.bundle="other";guard case .pause=DeviceScreenRules.classify(s) else{return XCTFail()}}
     func testAlertBlocksEvenKnownTerminal(){var s=screen(["已結束"]);s.nodes.append(.init(type:"XCUIElementTypeAlert",labels:[],rect:.init(x:20,y:200,width:100,height:100)));guard case .pause=DeviceScreenRules.classify(s) else{return XCTFail()}}

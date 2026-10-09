@@ -234,6 +234,16 @@ import LineDrawCore
         lookupMode="scan:"+(mode=="compact" && !compactScanAvailable ? "xml-fallback":mode)
         return screen
     }
+    private var tapForegroundGuardAvailable=false
+    #if DEBUG
+    func verifyTapGuardRejection()async throws->Bool{
+        guard tapForegroundGuardAvailable else{return false}
+        // Invalid target is rejected before coordinate resolution or dispatch,
+        // regardless of which application is foreground. Never replay a tap.
+        do{_=try await request("POST",route("wda/tap"),["linedraw_expected_bundle":"invalid.diagnostic.target","x":-10000,"y":-10000]);return false}
+        catch let error as WDAResponseFailure{return error.code=="invalid argument" && error.remoteMessage=="LineDraw tap guard invalid target"}
+    }
+    #endif
     private func compactCapture(decisionOnly:Bool=false)async throws->DeviceScreen{
         guard let dims=dimensions else{throw ObservationFailure.invalidXML}
         let began=ProcessInfo.processInfo.systemUptime
@@ -252,6 +262,7 @@ import LineDrawCore
         guard let envelope=value as? [String:Any],envelope["schema"] as? Int==1,let bundle=envelope["bundleId"] as? String else{throw ObservationFailure.invalidXML}
         #if DEBUG
         if directAX,envelope["ready"] as? Bool==true,envelope["snapshotMode"] as? String != "ax"{throw ObservationFailure.invalidXML}
+        tapForegroundGuardAvailable=envelope["tapForegroundGuard"] as? Int==1
         #endif
         foregroundBundles[bundle,default:0]+=1
         guard bundle==expectedBundle,envelope["ready"] as? Bool==true else{return DeviceScreen(bundle:bundle,width:dims.width,height:dims.height,nodes:[])}
@@ -607,14 +618,24 @@ import LineDrawCore
         let matches=screen.nodes.filter{$0.type==target.type && $0.enabled && $0.rect.near(target.rect) && $0.labels.contains(where:{target.labels.contains($0)})}
         guard matches.count==1,canAct() else{throw DeviceDriverError.notDispatched}
         // Revalidated exact target; never blind fixed coordinates or coupon redemption.
-        let foregroundBegan=ProcessInfo.processInfo.systemUptime
-        let foreground=try await active()
-        measuredPhase("tap.foreground",foregroundBegan)
-        guard foreground==expectedBundle,canAct() else{throw DeviceDriverError.notDispatched}
+        var serverGuard=false
+        #if DEBUG
+        serverGuard=ProcessInfo.processInfo.arguments.contains("--tap-foreground-guard") && tapForegroundGuardAvailable
+        #endif
+        if !serverGuard {
+            let foregroundBegan=ProcessInfo.processInfo.systemUptime
+            let foreground=try await active()
+            measuredPhase("tap.foreground",foregroundBegan)
+            guard foreground==expectedBundle,canAct() else{throw DeviceDriverError.notDispatched}
+        }
+        guard canAct() else{throw DeviceDriverError.notDispatched}
         invalidateObservation()
         let dispatchBegan=ProcessInfo.processInfo.systemUptime
         defer{measuredPhase("tap.dispatch",dispatchBegan)}
-        _=try await request("POST",route("wda/tap"),["x":target.rect.x+target.rect.width/2,"y":target.rect.y+target.rect.height/2])
+        var body:[String:Any]=["x":target.rect.x+target.rect.width/2,"y":target.rect.y+target.rect.height/2]
+        if serverGuard{body["linedraw_expected_bundle"]=expectedBundle}
+        do{_=try await request("POST",route("wda/tap"),body)}
+        catch let error as WDAResponseFailure where serverGuard && error.code=="invalid argument" && error.remoteMessage=="LineDraw tap guard rejected foreground"{throw DeviceDriverError.notDispatched}
         lastDrawAck=ProcessInfo.processInfo.systemUptime
     }
     // Path availability is relevant to LINE. A HEAD to the catalog host on every

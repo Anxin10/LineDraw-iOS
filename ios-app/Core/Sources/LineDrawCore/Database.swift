@@ -98,19 +98,32 @@ public struct LocalDatabase {
         return "LineDraw iOS\(version) · 本機診斷\n"+snapshot.diagnostics.map{"\(WireJSON.date($0.at)) \($0.code) \($0.message)"}.joined(separator:"\n")
     }
 }
+/// Bounded, thread-safe memoization of immutable timestamp strings. Repeated
+/// durable writes still encode the entire snapshot and atomically replace it.
+private final class WireDateCache: @unchecked Sendable {
+    let values=NSCache<NSDate,NSString>()
+    init(){values.countLimit=8192}
+}
 public enum WireJSON {
+    private static let sharedDates=WireDateCache()
     public static func date(_ date:Date)->String {let f=ISO8601DateFormatter();f.formatOptions=[.withInternetDateTime,.withFractionalSeconds];return f.string(from:date)}
     public static func parseDate(_ string:String)->Date? {let f=ISO8601DateFormatter();f.formatOptions=[.withInternetDateTime,.withFractionalSeconds];return f.date(from:string) ?? ISO8601DateFormatter().date(from:string)}
     public static func encoder(sortedKeys:Bool=true)->JSONEncoder {
         let e=JSONEncoder();if sortedKeys{e.outputFormatting=[.sortedKeys]}
         let formatter=ISO8601DateFormatter();formatter.formatOptions=[.withInternetDateTime,.withFractionalSeconds]
         // Catalog rows share a small set of start/end dates. Cache their exact
-        // wire strings within this encoder; no database format or durability change.
+        // wire strings within this encoder and across bounded repeated writes;
+        // no database format or durability change.
         var dates=[Date:String]()
         e.dateEncodingStrategy = .custom{date,encoder in
             let value:String
             if let cached=dates[date]{value=cached}
-            else{value=formatter.string(from:date);if dates.count<4096{dates[date]=value}}
+            else{
+                let key=date as NSDate
+                if let cached=sharedDates.values.object(forKey:key){value=cached as String}
+                else{value=formatter.string(from:date);sharedDates.values.setObject(value as NSString,forKey:key)}
+                if dates.count<4096{dates[date]=value}
+            }
             var c=encoder.singleValueContainer();try c.encode(value)
         }
         return e

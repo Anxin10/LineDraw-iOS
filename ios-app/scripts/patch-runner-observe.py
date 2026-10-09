@@ -5,9 +5,9 @@ import sys
 def patch(root):
     path=Path(root)/'WebDriverAgentLib/Commands/FBDebugCommands.m'
     source=path.read_text()
-    if '// LineDraw compact observation v4' in source:
+    if '// LineDraw compact observation v5' in source:
         return
-    if any('// LineDraw compact observation v'+str(v) in source for v in [1,2,3]):
+    if any('// LineDraw compact observation v'+str(v) in source for v in [1,2,3,4]):
         source=source[:source.index('\n// LineDraw compact observation v')]+source[source.rfind('\n@end'):]
     headers=['FBXCAXClientProxy.h','FBXCAccessibilityElement.h','FBActiveAppDetectionPoint.h','FBXCElementSnapshotWrapper.h','FBElementTypeTransformer.h','FBCommandStatus.h','FBConfiguration.h']
     for header in headers:
@@ -19,7 +19,7 @@ def patch(root):
     if '@selector(handleLineDrawObserve:)' not in source:
         source=source.replace(anchor,anchor+'\n    [[FBRoute GET:@"/linedraw/observe"] respondWithTarget:self action:@selector(handleLineDrawObserve:)],')
     method=r'''
-// LineDraw compact observation v4: optional direct AX snapshot for controlled read-only comparison.
+// LineDraw compact observation v5: optional direct AX snapshot for controlled read-only comparison.
 + (NSDictionary *)lineDrawActiveIdentity
 {
   NSArray *elements = [FBXCAXClientProxy.sharedClient activeApplications];
@@ -156,7 +156,7 @@ def patch(root):
   return FBResponseWithObject(@{
     @"schema": @1, @"bundleId": bundle, @"ready": @YES,
     @"nativeSeconds": @(NSProcessInfo.processInfo.systemUptime-began),
-    @"snapshotMode": snapshotMode, @"snapshotSeconds": @(captured-began), @"collectSeconds": @(collected-captured),
+    @"tapForegroundGuard": @1, @"snapshotMode": snapshotMode, @"snapshotSeconds": @(captured-began), @"collectSeconds": @(collected-captured),
     @"visibilityChecks": @(checks), @"geometrySkipped": @(skipped),
     @"tree": @{@"type": @"Application", @"isVisible": @YES, @"isEnabled": @YES,
       @"rect": @{@"x": @(r.origin.x), @"y": @(r.origin.y), @"width": @(r.size.width), @"height": @(r.size.height)},
@@ -166,6 +166,30 @@ def patch(root):
 '''
     source=source.replace('\n@end',method+'\n@end')
     path.write_text(source)
+    # Optional guard on the existing action endpoint. Ordinary WDA callers stay
+    # unchanged; local callers negotiate support through the observe envelope.
+    tapPath=Path(root)/'WebDriverAgentLib/Commands/FBElementCommands.m'
+    tapSource=tapPath.read_text()
+    if '// LineDraw foreground tap guard v1' not in tapSource:
+        tapSource=tapSource.replace('@implementation FBElementCommands', '#import "FBDebugCommands.h"\n\n@interface FBDebugCommands (LineDrawForeground)\n+ (NSDictionary *)lineDrawActiveIdentity;\n@end\n\n@implementation FBElementCommands',1)
+        anchor='+ (id<FBResponsePayload>)handleTap:(FBRouteRequest *)request\n{'
+        assert tapSource.count(anchor)==1
+        guard=r'''
+  // LineDraw foreground tap guard v1: reject before dispatch, never replay.
+  NSString *expected = request.arguments[@"linedraw_expected_bundle"];
+  if (expected != nil) {
+    if (!NSProcessInfo.processInfo.environment[@"LINEDRAW_LOCAL_ONLY"] ||
+        ![@[@"jp.naver.line", @"com.apple.mobilesafari"] containsObject:expected]) {
+      return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:@"LineDraw tap guard invalid target" traceback:nil]);
+    }
+    NSString *active = [FBDebugCommands lineDrawActiveIdentity][@"bundleId"];
+    if (![active isEqualToString:expected]) {
+      return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:@"LineDraw tap guard rejected foreground" traceback:nil]);
+    }
+  }
+'''
+        tapSource=tapSource.replace(anchor,anchor+guard,1)
+        tapPath.write_text(tapSource)
 
 if __name__=='__main__':
     patch(sys.argv[1])

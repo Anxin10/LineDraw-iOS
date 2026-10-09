@@ -60,8 +60,9 @@ public enum DeviceScreenRules {
     public static let completed=["恭喜中獎","恭喜您中獎了","恭喜獲得優惠券","很可惜，未中獎","未中獎","未抽中","銘謝惠顧","抽選完成","抽獎完成"]
     // LINE and OCR render the same disabled result with different ellipses.
     public static let notWon=["可惜..沒有抽中！","可惜...沒有抽中！","可惜…沒有抽中！","可惜⋯沒有抽中！","可惜沒有抽中！"]
+    public static let ended=["已結束","抽獎期間已結束"]
     public static let blockers=["驗證碼","验证码","captcha","登入","登录","解除封鎖","授權存取","同意條款","付款"]
-    public static var observationLabels:[String]{actions+couponHeaders+claimed+participated+completed+notWon+["已結束","官方帳號","已加入好友","聊天","關閉","Close","关闭"]}
+    public static var observationLabels:[String]{actions+couponHeaders+claimed+participated+completed+notWon+ended+["官方帳號","已加入好友","聊天","關閉","Close","关闭"]}
     private static let normalizedObservationLabels=Set(observationLabels.map(normalize))
     private static let normalizedBlockers=blockers.map(normalize)
     private static func requiresManualHandling(_ node:ScreenNode)->Bool {
@@ -87,7 +88,7 @@ public enum DeviceScreenRules {
         // an exact known action/result; two observations and a fresh pre-tap
         // OCR still apply. Unknown words never receive this allowance.
         guard hasCouponContext,confidence>=0.5 else{return false}
-        let allowed=actions+claimed+notWon+["已結束"]
+        let allowed=actions+claimed+notWon+ended
         return allowed.contains{normalize($0)==normalize(text)}
     }
     public static func stabilityKey(_ screen:DeviceScreen,decision:ScreenDecision)->String {
@@ -130,9 +131,9 @@ public enum DeviceScreenRules {
         if screen.nodes.contains(where:{$0.type=="XCUIElementTypeAlert"}){return .pause("畫面顯示對話框，請處理後恢復。")}
         let texts=screen.nodes.flatMap(\.labels).map(normalize)
         func has(_ labels:[String])->Bool{labels.contains{texts.contains(normalize($0))}}
-        let coupon=has(couponHeaders) || !matches(screen,actions+["查看已領取的優惠券","已結束"],disabled:true).isEmpty
+        let coupon=has(couponHeaders) || !matches(screen,actions+claimed+ended,disabled:true).isEmpty
         if coupon {
-            if !matches(screen,["已結束"],disabled:true).isEmpty{return .terminal("ENDED")}
+            if !matches(screen,ended,disabled:true).isEmpty{return .terminal("ENDED")}
             if !matches(screen,claimed,disabled:true).isEmpty || has(participated){return .terminal("ALREADY")}
             if has(completed) || !matches(screen,notWon,disabled:true).isEmpty{return .terminal("COMPLETE")}
         }

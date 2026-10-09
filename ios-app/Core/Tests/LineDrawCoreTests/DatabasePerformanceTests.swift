@@ -2,6 +2,23 @@ import XCTest
 @testable import LineDrawCore
 
 final class DatabasePerformanceTests: XCTestCase {
+    func testSharedTimestampCachePreservesWireValuesAcrossDurableWrites()throws{
+        let file=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("state.json")
+        defer{try? FileManager.default.removeItem(at:file.deletingLastPathComponent())}
+        var db=try LocalDatabase(file:file)
+        let formatter=ISO8601DateFormatter();formatter.formatOptions=[.withInternetDateTime,.withFractionalSeconds]
+        let dates=(0..<9000).map{Date(timeIntervalSince1970:1790912000+Double($0)/1000)}
+        for _ in 0..<2 {
+            let values=try JSONDecoder().decode([String].self,from:WireJSON.encoder().encode(dates))
+            XCTAssertEqual(values,dates.map{formatter.string(from:$0)})
+        }
+        for status in ["SUBMIT_INTENT","SUBMITTED"] {
+            try db.update{$0.records["durable"]=ParticipationRecord(id:"durable",product:"測試",store:"店家",status:status,evidence:"durable",updatedAt:dates.last!)}
+            let reloaded=try LocalDatabase(file:file)
+            XCTAssertEqual(reloaded.snapshot.records["durable"]?.status,status)
+            XCTAssertEqual(reloaded.snapshot.records["durable"]?.updatedAt.timeIntervalSince1970,dates.last!.timeIntervalSince1970)
+        }
+    }
     func testUnsortedPersistenceKeepsIdenticalJSONValues()throws{
         var snapshot=DatabaseSnapshot();snapshot.draws=TestCatalog.five()
         snapshot.settings.batchLookupMode="compact"
