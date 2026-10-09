@@ -14,6 +14,8 @@ import LineDrawDeviceBridge
     private var userCancelled=false
     private var work=DeviceWorkProgress()
     private var lastWorkPublish:TimeInterval=0
+    private var lastTaskTitle=""
+    private var lastTaskSubtitle=""
     private(set) var lastCode="NOT_STARTED"
     var cancellationSource:String {expired ? "backgroundTask":userCancelled ? "appStop":"taskCancellation"}
     var cancellationMessage:String {expired ? "iOS 背景工作已結束，已停止；可能由系統或系統工作進度取消。":userCancelled ? "已依使用者操作停止。":"執行已取消。"}
@@ -51,7 +53,7 @@ import LineDrawDeviceBridge
     private func startOnce(onStage:@escaping(String)->Void)async throws->LocalWDA{
         guard UIApplication.shared.applicationState == .active else{throw LineDrawError.message("請回到 App 按下開始。")}
         guard let bytes=try DeviceSecrets.load() else{throw LineDrawError.message("請先在「手機自主模式」完成手機配對。")}
-        expired=false;userCancelled=false;work=DeviceWorkProgress();lastWorkPublish=0;lastCode="PREPARING";requested=true
+        expired=false;userCancelled=false;work=DeviceWorkProgress();lastWorkPublish=0;lastTaskTitle="";lastTaskSubtitle="";lastCode="PREPARING";requested=true
         let request=BGContinuedProcessingTaskRequest(identifier:Self.taskID,title:"LineDraw 抽選",subtitle:"準備手機自主執行")
         request.strategy = .fail
         do{
@@ -81,8 +83,7 @@ import LineDrawDeviceBridge
                 if stage=="failed" || stage=="stopped"{throw LineDrawError.message(Self.message(code))}
                 if stage=="startingRunner",await local.ready(){
                     try await local.connect();lastCode="READY"
-                    // Set the title before leaving our app. Repeated title changes while
-                    // LINE is foreground expand Dynamic Island over its top-right Close.
+                    // Initial title; completed-item reports update the remaining count.
                     background?.updateTitle("LineDraw 抽選",subtitle:"執行中；回到 LineDraw 可暫停或停止")
                     return local
                 }
@@ -92,6 +93,17 @@ import LineDrawDeviceBridge
         }catch{await stop(success:false);throw error}
     }
     func report(_ p:DeviceBatchProgress){
+        if p.total>0 {
+            let finished=min(max(p.index,0),p.total)
+            let remaining=p.total-finished
+            let title="LineDraw · 剩餘 \(remaining) 筆"
+            let state=p.state=="PAUSED" ? " · 已暫停":p.state=="STOPPED" || p.state=="STOPPING" ? " · 已停止":""
+            let subtitle="已完成 \(finished) / \(p.total)\(state)"
+            if title != lastTaskTitle || subtitle != lastTaskSubtitle {
+                background?.updateTitle(title,subtitle:subtitle)
+                lastTaskTitle=title;lastTaskSubtitle=subtitle
+            }
+        }
         work.update(p);publishWork()
     }
     private func publishWork(){

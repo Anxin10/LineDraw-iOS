@@ -53,6 +53,7 @@ struct SettingsView:View{
         Section{NavigationLink{DiagnosticsView()}label:{Label("診斷紀錄",systemImage:"stethoscope")};NavigationLink{DeclarationView()}label:{Label("使用說明",systemImage:"doc.text")};NavigationLink{LicenseView()}label:{Label("授權與第三方元件",systemImage:"curlybraces")};Link(destination:CatalogParser.sourceURL){Label("查看來源網站",systemImage:"globe")}}
         Section{NavigationLink("版本修正紀錄"){List{
             Section("1.1.11（34） · 2026/10/09"){
+                Text("靈動島顯示剩餘筆數與已完成／總筆數；每筆完成後更新，暫停或停止時顯示狀態。")
                 Text("新增直接 AX 實驗查詢選項，支援新版 Runner 點擊前前景核對，保留換頁確認與防重送。")
                 Text("修正「抽獎期間已結束」辨識，避免等待到載入逾時；查詢預算不足時不再送出新請求。")
                 Text("漏抽掃描先按活動鍵值去重，避免分批位置偏移；手機鎖定時顯示明確錯誤。")

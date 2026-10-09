@@ -312,7 +312,14 @@ import LineDrawCore
     func startMissedScan(limit:Int?=nil){
         guard accepted,!locked,deviceMode,area != .demo else{return}
         var candidates=MissedDrawScanner.candidates(visible,at:now)
+        var progressOffset=0
+        var progressTotal:Int?=nil
         #if DEBUG
+        let arguments=ProcessInfo.processInfo.arguments
+        if arguments.contains("--missed-scan"),let raw=arguments.first(where:{$0.hasPrefix("--scan-overall-total=")}),let overall=Int(raw.dropFirst("--scan-overall-total=".count)),overall>0,
+           let offsetRaw=arguments.first(where:{$0.hasPrefix("--scan-offset=")}),let offset=Int(offsetRaw.dropFirst("--scan-offset=".count)),offset>=0,offset<overall {
+            progressOffset=offset;progressTotal=overall
+        }
         if ProcessInfo.processInfo.arguments.contains("--scan-submitted-only"){let scoped=records;candidates=candidates.filter{scoped[$0.activityKey]?.status=="SUBMITTED"}}
         if ProcessInfo.processInfo.arguments.contains("--missed-scan"),let raw=ProcessInfo.processInfo.arguments.first(where:{$0.hasPrefix("--scan-offset=")}),let offset=Int(raw.dropFirst("--scan-offset=".count)){candidates=Array(candidates.dropFirst(max(0,offset)))}
         #endif
@@ -353,7 +360,7 @@ import LineDrawCore
                     #if DEBUG
                     report("running")
                     #endif
-                    var progress=DeviceBatchProgress();progress.total=total;progress.index=index;runtime.report(progress)
+                    var progress=DeviceBatchProgress();progress.total=progressTotal ?? total;progress.index=progressOffset+index;runtime.report(progress)
                 }
                 try await scanner.run(rows)
                 let seconds=ProcessInfo.processInfo.systemUptime-began
