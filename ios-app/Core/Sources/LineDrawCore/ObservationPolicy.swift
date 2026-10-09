@@ -20,9 +20,9 @@ public struct QueryContext:Sendable,Equatable {
     public init(itemID:UUID=UUID(),navigationID:UUID=UUID(),deadline:TimeInterval){
         self.itemID=itemID;self.navigationID=navigationID;self.deadline=deadline
     }
-    public func timeout(cap:TimeInterval,now:TimeInterval=ProcessInfo.processInfo.systemUptime)throws->TimeInterval {
+    public func timeout(cap:TimeInterval,now:TimeInterval=ProcessInfo.processInfo.systemUptime,minimum:TimeInterval=0)throws->TimeInterval {
         let remaining=deadline-now
-        guard remaining>0 else{throw ObservationFailure.deadlineExceeded}
+        guard remaining>0,remaining>=minimum else{throw ObservationFailure.deadlineExceeded}
         return min(cap,remaining)
     }
     public func navigating()->Self{.init(itemID:itemID,deadline:deadline)}

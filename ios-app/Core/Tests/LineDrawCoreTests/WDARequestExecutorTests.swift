@@ -5,6 +5,17 @@ import FoundationNetworking
 #endif
 
 @MainActor final class WDARequestExecutorTests:XCTestCase {
+    func testNearDeadlineReadNeverDispatchesButActualTimeoutStillPropagates()async throws{
+        var sends=0
+        for suffix in ["source","linedraw/observe","wda/activeAppInfo"] {
+            do{_=try await WDARequestExecutor.execute(request("GET",suffix),context:QueryContext(deadline:30),clock:{29.5},send:{r in sends+=1;return self.response(r)});XCTFail("Sub-second read dispatched")}
+            catch{XCTAssertEqual(error as? ObservationFailure,.deadlineExceeded)}
+        }
+        XCTAssertEqual(sends,0)
+        do{_=try await WDARequestExecutor.execute(request("GET","linedraw/observe"),context:QueryContext(deadline:30),clock:{28},send:{_ in sends+=1;throw URLError(.timedOut)});XCTFail("Timeout swallowed")}
+        catch{XCTAssertEqual((error as? URLError)?.code,.timedOut)}
+        XCTAssertEqual(sends,1)
+    }
     func request(_ method:String="GET",_ suffix:String="source")->URLRequest{
         var request=URLRequest(url:URL(string:"http://127.0.0.1:52000/session/private-session/"+suffix)!)
         request.httpMethod=method;request.timeoutInterval=12;return request

@@ -473,6 +473,10 @@ import LineDrawCore
             let began=Date();var queueSeconds:Double=0;var startupSeconds:Double=0;var phase="preparingFixture"
             var stages=[String]();var records=[String:ParticipationRecord]();var measuredBatch:DeviceBatch?
             let args=ProcessInfo.processInfo.arguments
+            let fixtureCount=min(30,max(1,args.first{$0.hasPrefix("--fixture-limit=")}.flatMap{Int($0.dropFirst("--fixture-limit=".count))} ?? 5))
+            let durable=args.contains("--fixture-durable")
+            let probeFile=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("speed-state.json")
+            defer{try? FileManager.default.removeItem(at:probeFile.deletingLastPathComponent())}
             let faultMode=args.contains("--fixture-timeout-once") ? "timeoutOnce":args.contains("--fixture-cancel-read") ? "cancelRead":"none"
             var faultInjected=false
             @MainActor func save(_ status:String,_ details:String=""){
@@ -480,7 +484,7 @@ import LineDrawCore
                     var value:[String:Any]=["operation":a.operation,"attempt":a.attempt,"seconds":a.seconds,"timedOut":a.timedOut]
                     if let code=a.errorCode{value["errorCode"]=code};return value
                 } ?? []
-                let body:[String:Any]=["schema":3,"build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","phase":phase,"runtimeCode":runtime.lastCode,"cancellationSource":status=="cancelled" ? runtime.cancellationSource:"none","faultMode":faultMode,"faultInjected":faultInjected,"inFlightOperation":runtime.driver?.inFlightOperation ?? "none","coldSafari":args.contains("--cold-fixture"),"requestAttempts":attempts,"fixtureRequests":fixture.requests,"status":status,"details":details,"elapsed":Date().timeIntervalSince(began),"startupSeconds":startupSeconds,"queueSeconds":queueSeconds,"completed":records.values.filter{$0.status=="SUBMITTED"}.count,"statuses":records.values.map(\.status),"acknowledged":fixture.acknowledged.sorted(),"acknowledgementCounts":fixture.acknowledgementCounts,"stages":stages,"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"foregroundBundles":runtime.driver?.foregroundBundles ?? [:],"items":measuredBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"manualWait":$0.manualWait,"status":$0.status] as [String:Any]} ?? [],"time":WireJSON.date(Date())]
+                let body:[String:Any]=["schema":4,"fixtureCount":fixtureCount,"durable":durable,"build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","phase":phase,"runtimeCode":runtime.lastCode,"cancellationSource":status=="cancelled" ? runtime.cancellationSource:"none","faultMode":faultMode,"faultInjected":faultInjected,"inFlightOperation":runtime.driver?.inFlightOperation ?? "none","coldSafari":args.contains("--cold-fixture"),"requestAttempts":attempts,"fixtureRequests":fixture.requests,"status":status,"details":details,"elapsed":Date().timeIntervalSince(began),"startupSeconds":startupSeconds,"queueSeconds":queueSeconds,"completed":records.values.filter{$0.status=="SUBMITTED"}.count,"statuses":records.values.map(\.status),"acknowledged":fixture.acknowledged.sorted(),"acknowledgementCounts":fixture.acknowledgementCounts,"stages":stages,"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"foregroundBundles":runtime.driver?.foregroundBundles ?? [:],"items":measuredBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"manualWait":$0.manualWait,"status":$0.status] as [String:Any]} ?? [],"time":WireJSON.date(Date())]
                 if let bytes=try? JSONSerialization.data(withJSONObject:body,options:.prettyPrinted){try? bytes.write(to:report,options:.atomic)}
             }
             save("running")
@@ -504,8 +508,13 @@ import LineDrawCore
                     }
                 }
                 if ProcessInfo.processInfo.arguments.contains("--cold-fixture"){phase="restartSafari";try await driver.prepareColdFixture()}
-                let rows=(0..<5).map{i->Draw in var row=TestCatalog.five()[i];row.startsAt=Date().addingTimeInterval(-60);row.endsAt=Date().addingTimeInterval(3600);row.canonicalURL="https://liff.line.me/linedraw-fixture/c/speed\(i)";return row}
-                let batch=DeviceBatch(driver:driver,expectedBundle:driver.expectedBundle,read:{records[$0]},write:{records[$0.activityKey]=$1},update:{runtime.report($0);if phase != $0.reason{phase=$0.reason;save("running")};self.deviceStage="速度驗證："+$0.reason})
+                var probeDatabase:LocalDatabase?
+                if durable{var db=try LocalDatabase(file:probeFile);try db.update{$0=self.data};probeDatabase=db}
+                let rows=(0..<fixtureCount).map{i->Draw in var row=TestCatalog.five()[i%5];row.id="probe:\(i)";row.activityKey="probe:\(i)";row.startsAt=Date().addingTimeInterval(-60);row.endsAt=Date().addingTimeInterval(3600);row.canonicalURL="https://liff.line.me/linedraw-fixture/c/speed\(i)";return row}
+                let batch=DeviceBatch(driver:driver,expectedBundle:driver.expectedBundle,read:{records[$0]},write:{row,record in
+                    if durable{try probeDatabase!.update{$0.records["speed-probe\n"+row.activityKey]=record}}
+                    records[row.activityKey]=record
+                },update:{runtime.report($0);if phase != $0.reason{phase=$0.reason;save("running")};self.deviceStage="速度驗證："+$0.reason})
                 measuredBatch=batch
                 driver.canAct={batch.progress.state=="RUNNING" && !Task.isCancelled}
                 startupSeconds=Date().timeIntervalSince(began);let started=Date();phase="runningQueue";save("running")
@@ -513,10 +522,11 @@ import LineDrawCore
                 queueSeconds=Date().timeIntervalSince(started)
                 try Task.checkCancellation()
                 // Observe fixture acknowledgements only after the batch; the production engine never waits for results.
-                for _ in 0..<20 where fixture.acknowledged.count<5{try await Task.sleep(for:.milliseconds(100))}
-                guard batch.progress.state=="COMPLETED",records.count==5,records.values.allSatisfy({$0.status=="SUBMITTED"}),fixture.acknowledged==Set((0..<5).map{"speed\($0)"}),fixture.acknowledgementCounts.values.allSatisfy({$0==1}) else{throw LineDrawError.message("速度驗證未全部完成：\(batch.progress.reason)")}
+                for _ in 0..<20 where fixture.acknowledged.count<fixtureCount{try await Task.sleep(for:.milliseconds(100))}
+                guard batch.progress.state=="COMPLETED",records.count==fixtureCount,records.values.allSatisfy({$0.status=="SUBMITTED"}),fixture.acknowledged==Set((0..<fixtureCount).map{"speed\($0)"}),fixture.acknowledgementCounts.values.allSatisfy({$0==1}) else{throw LineDrawError.message("速度驗證未全部完成：\(batch.progress.reason)")}
+                if durable{let reloaded=try LocalDatabase(file:probeFile);guard rows.allSatisfy({reloaded.snapshot.records["speed-probe\n"+$0.activityKey]?.status=="SUBMITTED"}) else{throw LineDrawError.message("耐久測試紀錄重讀不一致。")}}
                 driver.onDiagnosticChange=nil;driver.fixtureReadFault=nil
-                phase="complete";save("passed");await runtime.stop(success:true);deviceStage="速度驗證通過：5 筆本機操作 \(String(format:"%.2f",queueSeconds)) 秒。"
+                phase="complete";save("passed");await runtime.stop(success:true);deviceStage="速度驗證通過：\(fixtureCount) 筆本機操作 \(String(format:"%.2f",queueSeconds)) 秒。"
             }catch{
                 runtime.driver?.onDiagnosticChange=nil;runtime.driver?.fixtureReadFault=nil
                 let message=error is CancellationError ? runtime.cancellationMessage:error.localizedDescription

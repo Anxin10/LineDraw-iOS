@@ -56,6 +56,18 @@ Debug `--tap-foreground-guard` 在 Runner 明確回報支援後，將預期 bund
 
 驗證：App Debug 與 Runner test build 成功、Runner 簽章驗證通過；核心 144 項測試，3 略過、0 失敗。每筆送出 3 秒及長批次真實送出仍待驗收。
 
+## 耐久連續測試與預算邊界（16:32–16:40）
+
+剩餘一般店家五筆及後續五筆皆由 LINE 確認 ENDED，無新送出。重讀手機資料庫並套用完整 eligibility、canonicalURL、syncIssue、profile、防重送條件，目前可執行未完成活動為零；不清除完成紀錄來製造測試對象。
+
+手機 loopback Safari 測試頁：原 targeted 查詢五筆佇列 12.34 秒（第一筆 3.99 秒，其餘 1.96–2.16 秒）；直接 AX 加 Runner 前景核對五筆 8.31 秒，各筆 1.53–1.98 秒，每筆 acknowledgement 恰一次。這兩輪用記憶體紀錄，不能代表資料保存成本。
+
+新增 Debug `--fixture-durable --fixture-limit=20`，使用目前資料庫副本及真實 LocalDatabase 原子保存，測試後重新載入核對二十筆 SUBMITTED，副本在測試結束刪除，真實參加紀錄不變。實機二十筆 passed、佇列 38.01 秒（含啟動 43.30 秒）、各筆 1.59–2.65 秒，保存 0.194–0.375 秒，二十筆 acknowledgement 各一次。此為本機頁面，不能代替真實 LINE 網路／換頁時間。
+
+查詢預算邊界修正：剩餘不到一秒時不送出新的 bounded GET，直接拋出 deadlineExceeded 讓佇列保存 LOAD_TIMEOUT 並前進。已在傳輸中的真正逾時仍原樣傳遞，不重送、不疊加請求；點擊請求不套用此唯讀規則。新增測試驗證 source、compact、activeAppInfo 在預算不足時 send 次數為零，以及實際逾時仍只送一次並傳遞錯誤。
+
+核心 145 項測試，3 略過、0 失敗；App Debug 編譯安裝成功。目標未完成：需新可抽活動驗證真實送出低於 3 秒與長批次；目前 AX／Runner 核對仍透過明確 Debug 實驗旗標啟用。
+
 ## 驗證與下一步
 
 Runner 與 App Debug 編譯成功、Runner 簽章驗證成功；核心 142 項測試、3 略過、0 失敗。正式預設仍使用原路徑。直接 AX 需完成正常可抽頁的完整流程、警告／換頁／不確定結果防重送驗證，才考慮正式啟用。

@@ -34,7 +34,10 @@ public struct WDARequestAttempt:Sendable {
         let deadlines: [TimeInterval]=context != nil ? [request.timeoutInterval] : screenRead ? [18,12]:appRead ? [min(request.timeoutInterval,12),min(request.timeoutInterval,8)]:[request.timeoutInterval]
         for (index,timeout) in deadlines.enumerated() {
             try Task.checkCancellation()
-            var attempt=request;attempt.timeoutInterval=try context?.timeout(cap:timeout,now:clock()) ?? timeout
+            // Do not dispatch a new bounded read with a sub-second deadline.
+            // Budget exhaustion before sending is safe to advance; an actual
+            // in-flight timeout still propagates and must stop the transport.
+            var attempt=request;attempt.timeoutInterval=try context?.timeout(cap:timeout,now:clock(),minimum:method=="GET" ? 1:0) ?? timeout
             let began=ProcessInfo.processInfo.systemUptime
             let result:(Data,URLResponse)
             do {
