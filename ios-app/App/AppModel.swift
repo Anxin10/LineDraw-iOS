@@ -64,6 +64,7 @@ import LineDrawCore
                 try DeviceSecrets.save(Data(contentsOf:incoming));try FileManager.default.removeItem(at:incoming);hasDevicePairing=true
             }
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--device-check"){Task{try? await Task.sleep(for:.seconds(2));self.checkDeviceConnection()}}
+            if !isUITest,ProcessInfo.processInfo.arguments.contains("--inspect-line"){Task{try? await Task.sleep(for:.seconds(2));self.inspectCurrentLINE()}}
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--device-speed"){Task{try? await Task.sleep(for:.seconds(2));self.runDeviceSpeedProbe()}}
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--missed-scan"){Task{try? await Task.sleep(for:.seconds(2));self.chooseArea(.website);self.startMissedScan(limit:5)}}
             // Explicit developer launch after authorization; normal launches
@@ -258,6 +259,46 @@ import LineDrawCore
             busy=false;deviceTask=nil
         }
     }
+    #if DEBUG
+    /// Explicit local diagnostic: activate LINE without opening a coupon or
+    /// dispatching any taps. The private report is never a Release asset.
+    private func inspectCurrentLINE(){
+        guard accepted,!locked else{return};busy=true
+        deviceTask=Task{
+            let runtime=deviceRuntime ?? DeviceRuntime();deviceRuntime=runtime
+            runtime.onExpired={[weak self] in self?.deviceTask?.cancel()}
+            var report:[String:Any]=["at":WireJSON.date(Date()),"taps":0,"openedURLs":0]
+            do{
+                let driver=try await runtime.start{self.deviceStage=$0}
+                driver.scanLookupMode="compact"
+                _=try await driver.request("POST",driver.route("wda/apps/activate"),["bundleId":DeviceScreenRules.lineBundle])
+                try await Task.sleep(for:.milliseconds(300))
+                let began=ProcessInfo.processInfo.systemUptime
+                var screen=try await driver.scanSnapshot()
+                var attempts=1
+                while screen.bundle != DeviceScreenRules.lineBundle && attempts<5 {
+                    try await Task.sleep(for:.milliseconds(400))
+                    screen=try await driver.scanSnapshot();attempts+=1
+                }
+                report["attempts"]=attempts
+                report["querySeconds"]=ProcessInfo.processInfo.systemUptime-began
+                report["bundle"]=screen.bundle
+                report["alerts"]=screen.nodes.filter{$0.type=="XCUIElementTypeAlert"}.map{["labels":Array($0.labels.prefix(8)).map{String($0.prefix(300))},"rect":["x":$0.rect.x,"y":$0.rect.y,"width":$0.rect.width,"height":$0.rect.height]] as [String:Any]}
+                report["labels"]=Array(screen.nodes.flatMap(\.labels).prefix(100)).map{String($0.prefix(300))}
+                if case .pause(let message)=DeviceScreenRules.classify(screen){report["decisionReason"]=message}
+                report["status"]="read"
+                if let raw=try await driver.request("GET",driver.route("screenshot")) as? String,let bytes=Data(base64Encoded:raw){
+                    let file=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("private-line-inspection.png")
+                    try bytes.write(to:file,options:[.atomic,.completeFileProtection])
+                }
+            }catch{report["status"]="failed";report["error"]=error.localizedDescription}
+            await runtime.stop(success:report["status"] as? String=="read")
+            let file=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("private-line-inspection.json")
+            if let bytes=try? JSONSerialization.data(withJSONObject:report,options:.sortedKeys){try? bytes.write(to:file,options:[.atomic,.completeFileProtection])}
+            busy=false;deviceTask=nil
+        }
+    }
+    #endif
     func startMissedScan(limit:Int?=nil){
         guard accepted,!locked,deviceMode,area != .demo else{return}
         let candidates=visible.filter{$0.runnable(at:now)}
