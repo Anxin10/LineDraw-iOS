@@ -4,6 +4,8 @@ public struct DatabaseWriteTiming:Sendable,Codable {
     public var encodeSeconds:Double,writeSeconds:Double
 }
 public struct LocalDatabase {
+    private var encodedDraws:Data?
+    private var encodedDrawValues:[Draw]?
     public private(set) var lastWriteTiming=DatabaseWriteTiming(encodeSeconds:0,writeSeconds:0)
     public private(set) var snapshot: DatabaseSnapshot
     public let file: URL
@@ -21,12 +23,32 @@ public struct LocalDatabase {
         var candidate=snapshot;try operation(&candidate)
         try FileManager.default.createDirectory(at:file.deletingLastPathComponent(),withIntermediateDirectories:true)
         let began=ProcessInfo.processInfo.systemUptime
-        let bytes=try WireJSON.encoder(sortedKeys:false).encode(candidate)
+        let bytes=try encodeSnapshot(candidate)
         let encoded=ProcessInfo.processInfo.systemUptime
         try bytes.write(to:file,options:.atomic)
         let written=ProcessInfo.processInfo.systemUptime
         snapshot=candidate
         lastWriteTiming=DatabaseWriteTiming(encodeSeconds:encoded-began,writeSeconds:written-encoded)
+    }
+    /// Reuse only the unchanged catalog fragment. Every transaction still
+    /// builds a complete snapshot and atomically replaces the same state file.
+    private mutating func encodeSnapshot(_ candidate:DatabaseSnapshot)throws->Data{
+        if encodedDrawValues != candidate.draws || encodedDraws==nil {
+            encodedDraws=try WireJSON.encoder(sortedKeys:false).encode(candidate.draws)
+            encodedDrawValues=candidate.draws
+        }
+        var metadata=candidate;metadata.draws=[]
+        var bytes=try WireJSON.encoder(sortedKeys:false).encode(metadata)
+        let marker=Data("\"draws\":[]".utf8)
+        guard let range=bytes.range(of:marker),
+              bytes.range(of:marker,in:range.upperBound..<bytes.endIndex)==nil,
+              let encodedDraws else{
+            // Future encoder formatting or schema changes cannot produce a
+            // partial/ambiguous snapshot: use the original full encoder.
+            return try WireJSON.encoder(sortedKeys:false).encode(candidate)
+        }
+        bytes.replaceSubrange((range.upperBound-2)..<range.upperBound,with:encodedDraws)
+        return bytes
     }
     public mutating func merge(_ incoming:[Draw],area:DrawArea,now:Date=Date(),source:CatalogSource = .funbox)throws{
         let belongs:(Draw)->Bool = { $0.area == area && (area != .website || source.owns($0)) }

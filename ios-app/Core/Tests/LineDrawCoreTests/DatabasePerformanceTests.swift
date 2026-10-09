@@ -2,6 +2,64 @@ import XCTest
 @testable import LineDrawCore
 
 final class DatabasePerformanceTests: XCTestCase {
+    private func assertFullSnapshot(_ db:LocalDatabase,file:URL)throws{
+        let persisted=try JSONSerialization.jsonObject(with:Data(contentsOf:file)) as! NSDictionary
+        let expectedBytes=try WireJSON.encoder(sortedKeys:false).encode(db.snapshot)
+        let expected=try JSONSerialization.jsonObject(with:expectedBytes) as! NSDictionary
+        XCTAssertEqual(persisted,expected)
+        // Compare against the existing wire precision, including millisecond dates.
+        let expectedReload=try WireJSON.decoder().decode(DatabaseSnapshot.self,from:expectedBytes)
+        XCTAssertEqual(try LocalDatabase(file:file).snapshot.draws,expectedReload.draws)
+        XCTAssertEqual(try LocalDatabase(file:file).snapshot.records,expectedReload.records)
+    }
+    func testCachedCatalogPreservesEntireSnapshotAndInvalidatesChangedDraws()throws{
+        let file=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("state.json")
+        defer{try? FileManager.default.removeItem(at:file.deletingLastPathComponent())}
+        var db=try LocalDatabase(file:file)
+        try db.update{$0.draws=TestCatalog.five()}
+        for status in ["SUBMIT_INTENT","SUBMITTED"]{
+            try db.update{$0.records["draws"]=ParticipationRecord(id:"draws",product:"\"draws\":[] 🌀",store:"店家",status:status,evidence:"literal \"draws\":[] must stay text")}
+            try assertFullSnapshot(db,file:file)
+        }
+        try db.update{$0.draws[0].product="新商品";$0.draws[0].archived=true;$0.draws[0].endsAt=Date(timeIntervalSince1970:1791000000.125);$0.draws.reverse()}
+        try assertFullSnapshot(db,file:file)
+        try db.update{$0.draws=[];$0.records.removeValue(forKey:"draws")}
+        try assertFullSnapshot(db,file:file)
+        try db.update{$0.draws=TestCatalog.five()}
+        try assertFullSnapshot(db,file:file)
+    }
+    func testFailedWriteCannotCommitCachedCandidateCatalog()throws{
+        let folder=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let file=folder.appendingPathComponent("state.json"),backup=folder.appendingPathComponent("backup.json")
+        defer{try? FileManager.default.removeItem(at:folder)}
+        var db=try LocalDatabase(file:file);try db.update{$0.draws=TestCatalog.five()}
+        let original=db.snapshot.draws
+        try FileManager.default.moveItem(at:file,to:backup)
+        try FileManager.default.createDirectory(at:file,withIntermediateDirectories:false)
+        XCTAssertThrowsError(try db.update{$0.draws[0].product="must not commit"})
+        XCTAssertEqual(db.snapshot.draws,original)
+        try FileManager.default.removeItem(at:file);try FileManager.default.moveItem(at:backup,to:file)
+        try db.update{$0.records["new"]=ParticipationRecord(id:"new",product:"測試",store:"店家",status:"SUBMIT_INTENT",evidence:"durable")}
+        try assertFullSnapshot(db,file:file)
+    }
+    func testLargeCatalogFragmentReuseKeepsIntentAndSubmitDurable()throws{
+        let file=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("state.json")
+        defer{try? FileManager.default.removeItem(at:file.deletingLastPathComponent())}
+        var db=try LocalDatabase(file:file)
+        try db.update{snapshot in
+            snapshot.draws=(0..<3100).map{i in var row=TestCatalog.demo()[0];row.id="catalog-\(i)";row.activityKey=row.id;return row}
+            for i in 0..<1900{snapshot.records["record-\(i)"]=ParticipationRecord(id:"record-\(i)",product:"測試",store:"店家",status:"SUBMITTED",evidence:"fixture",updatedAt:Date(timeIntervalSince1970:1791000000+Double(i)))}
+        }
+        let began=ProcessInfo.processInfo.systemUptime
+        _=try WireJSON.encoder(sortedKeys:false).encode(db.snapshot)
+        let fullSeconds=ProcessInfo.processInfo.systemUptime-began
+        for status in ["SUBMIT_INTENT","SUBMITTED"]{
+            try db.update{$0.records["probe"]=ParticipationRecord(id:"probe",product:"測試",store:"店家",status:status,evidence:"durable")}
+            XCTAssertEqual(try LocalDatabase(file:file).snapshot.records["probe"]?.status,status)
+            try assertFullSnapshot(db,file:file)
+        }
+        print("Full snapshot encode: \(fullSeconds)s; cached catalog encode: \(db.lastWriteTiming.encodeSeconds)s")
+    }
     func testSharedTimestampCachePreservesWireValuesAcrossDurableWrites()throws{
         let file=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("state.json")
         defer{try? FileManager.default.removeItem(at:file.deletingLastPathComponent())}

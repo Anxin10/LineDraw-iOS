@@ -53,6 +53,7 @@ struct SettingsView:View{
         Section{NavigationLink{DiagnosticsView()}label:{Label("診斷紀錄",systemImage:"stethoscope")};NavigationLink{DeclarationView()}label:{Label("使用說明",systemImage:"doc.text")};NavigationLink{LicenseView()}label:{Label("授權與第三方元件",systemImage:"curlybraces")};Link(destination:CatalogParser.sourceURL){Label("查看來源網站",systemImage:"globe")}}
         Section{NavigationLink("版本修正紀錄"){List{
             Section("1.1.11（34） · 2026/10/09"){
+                Text("參加紀錄保存重用未變更的活動清單編碼，每次仍完整原子覆寫；活動清單更新時自動重建快取。")
                 Text("靈動島顯示剩餘筆數與已完成／總筆數；每筆完成後更新，暫停或停止時顯示狀態。")
                 Text("漏抽掃描記錄每次查詢的換頁、前景與辨識階段，診斷可區分慢速原因；不包含整頁文字或截圖。")
                 Text("新增直接 AX 實驗查詢選項，支援新版 Runner 點擊前前景核對，保留換頁確認與防重送。")
