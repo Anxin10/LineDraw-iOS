@@ -3,14 +3,19 @@ import Combine
 import LineDrawCore
 
 @MainActor final class AppModel:ObservableObject{
-    @Published var data=DatabaseSnapshot();@Published var area:DrawArea = .website;@Published var filter=CatalogFilter();@Published var selected=Set<String>()
+    @Published var data=DatabaseSnapshot(){didSet{catalogCache=nil}};@Published var area:DrawArea = .website{didSet{catalogCache=nil}};@Published var filter=CatalogFilter(){didSet{catalogCache=nil}};@Published var selected=Set<String>()
     @Published var busy=false;@Published var syncing=false;@Published var error:String?;@Published var notice:String?;@Published var pairing:PairingCredential?;@Published var companion:CompanionStatus?
-    @Published var companionOnline=false;@Published var now=Date();@Published var fatalStorage=false;@Published var demoRunning=false;@Published var demoPaused=false;@Published var demoIndex=0;@Published var demoTotal=0
+    @Published var companionOnline=false;@Published var now=Date(){didSet{catalogCache=nil}};@Published var fatalStorage=false;@Published var demoRunning=false;@Published var demoPaused=false;@Published var demoIndex=0;@Published var demoTotal=0
     private var db:LocalDatabase?;private let network=CatalogNetwork();private var client:CompanionClient?;private var polling=false;private var demoTask:Task<Void,Never>?;private var remoteEvents=Set<String>();private var syncTask:Task<[Draw],Error>?
     @Published var deviceMode=true
     @Published var deviceProgress=DeviceBatchProgress()
     @Published var deviceStage="尚未啟動"
     @Published var hasDevicePairing=false
+    @Published var missedScanRunning=false
+    @Published var missedFindings=[MissedDrawFinding]()
+    @Published var missedScanIndex=0
+    @Published var missedScanTotal=0
+    @Published var missedScanSummary="尚未掃描"
     let phonePairing=PhonePairing()
     private var phonePairingUpdates:AnyCancellable?
     private var deviceRuntime:DeviceRuntime?
@@ -39,6 +44,17 @@ import LineDrawCore
                 }
             }
             if !isUITest{try database.refreshBuiltInTests()}
+            if !isUITest,database.snapshot.draws.filter({$0.area == .website}).isEmpty{
+                if let url=Bundle.main.url(forResource:"catalog",withExtension:"json"),let raw=try? Data(contentsOf:url),let seed=try? WireJSON.decoder().decode([Draw].self,from:raw){
+                    try? database.merge(seed,area:.website)
+                }
+            }
+            #if DEBUG
+            // Explicit local setup for the authorized compact-mode test only.
+            if !isUITest,ProcessInfo.processInfo.arguments.contains("--enable-compact-batch") {
+                try database.update{$0.settings.batchLookupMode="compact"}
+            }
+            #endif
             db=database;data=database.snapshot
             if !isUITest{deviceMode=UserDefaults.standard.string(forKey:"executionMode") != "mac";hasDevicePairing=(try? DeviceSecrets.load()) != nil}
             if !isUITest {pairing=try KeychainStore.read();if let pairing{client=try CompanionClient(pairing)}}
@@ -49,6 +65,17 @@ import LineDrawCore
             }
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--device-check"){Task{try? await Task.sleep(for:.seconds(2));self.checkDeviceConnection()}}
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--device-speed"){Task{try? await Task.sleep(for:.seconds(2));self.runDeviceSpeedProbe()}}
+            if !isUITest,ProcessInfo.processInfo.arguments.contains("--missed-scan"){Task{try? await Task.sleep(for:.seconds(2));self.chooseArea(.website);self.startMissedScan(limit:5)}}
+            // Explicit developer launch after authorization; normal launches
+            // never submit. Limit to five runnable rows, retain repeat guards.
+            if !isUITest,ProcessInfo.processInfo.arguments.contains("--real-speed-batch"){Task{
+                try? await Task.sleep(for:.seconds(2))
+                guard self.accepted,!self.locked,self.deviceMode else{return}
+                self.chooseArea(.website)
+                self.selected=Set(self.runnable.prefix(5).map(\.id))
+                guard !self.selected.isEmpty else{self.notice="沒有可測試的未參加活動。";return}
+                await self.start()
+            }}
             // Explicit developer launch only; uses normal persistence/repeat guards.
             // No automatic draw is started by a normal app launch or release build.
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--device-test-batch"){Task{
@@ -70,15 +97,22 @@ import LineDrawCore
     }
     var accepted:Bool{data.consentVersion==UsageDeclaration.version && !fatalStorage}
     var profile:String{data.settings.profile}
-    var records:[String:ParticipationRecord]{db?.records(profile:profile,area:area) ?? [:]}
-    var allDraws:[Draw]{data.draws.filter{$0.area==area}.sorted{$0.ordinal<$1.ordinal}}
-    var visible:[Draw]{allDraws.filter{filter.matches($0,recorded:records[$0.activityKey]?.blocksRepeat==true,now:now)}}
-    var cities:[String]{Array(Set(allDraws.filter{!$0.archived}.map(\.city))).sorted()}
-    var runnable:[Draw]{visible.filter{$0.runnable(at:now) && records[$0.activityKey]?.blocksRepeat != true}}
+    private var catalogCache:CatalogPresentation?
+    private var catalog:CatalogPresentation {
+        if let catalogCache{return catalogCache}
+        let value=CatalogPresentation(snapshot:data,area:area,filter:filter,now:now,source:catalogSource)
+        catalogCache=value
+        return value
+    }
+    var records:[String:ParticipationRecord]{catalog.records}
+    var allDraws:[Draw]{catalog.all}
+    var visible:[Draw]{catalog.visible}
+    var cities:[String]{catalog.cities}
+    var runnable:[Draw]{catalog.runnable}
     var selectedDraws:[Draw]{runnable.filter{selected.contains($0.id)}}
     var locked:Bool{phonePairing.running || busy || demoRunning || deviceProgress.locked || companion?.engine.locked==true}
     var hasRemoteBatch:Bool{companion?.engine.locked==true}
-    var readyCount:Int{allDraws.filter{$0.runnable(at:now) && records[$0.activityKey]?.blocksRepeat != true}.count}
+    var readyCount:Int{catalog.readyCount}
     var recordList:[ParticipationRecord]{records.values.sorted{$0.updatedAt>$1.updatedAt}}
     var colorScheme:ColorScheme?{data.settings.appearance=="dark" ? .dark:data.settings.appearance=="light" ? .light:nil}
     func change(_ action:(inout DatabaseSnapshot)throws->Void){do{guard db != nil else{throw LineDrawError.message("本機資料不可用。")};try db!.update(action);data=db!.snapshot}catch{self.error=error.localizedDescription}}
@@ -88,6 +122,13 @@ import LineDrawCore
     func clearSelection(){selected=[]}
     func selectAll(){guard !locked else{return};selected=Set(runnable.map(\.id))}
     func toggle(_ draw:Draw){guard !locked,draw.runnable(at:now),records[draw.activityKey]?.blocksRepeat != true else{return};if selected.contains(draw.id){selected.remove(draw.id)}else{selected.insert(draw.id)}}
+    var catalogSource:CatalogSource {data.selectedCatalog ?? .funbox}
+    var catalogSummary:String {data.syncStatus(for:catalogSource).summary}
+    var catalogLastSync:Date? {data.syncStatus(for:catalogSource).lastSync}
+    func chooseCatalog(_ source:CatalogSource){
+        guard !locked else{return}
+        do{try db!.update{$0.selectedCatalog=source};data=db!.snapshot;selected=[];filter=CatalogFilter()}catch{self.error=error.localizedDescription}
+    }
     func chooseArea(_ area:DrawArea){guard !locked else{return};self.area=area;filter=CatalogFilter();selected=[];companion=nil
         if area == .test && !data.draws.contains(where:{$0.area == .test}){do{try db!.merge(TestCatalog.five(),area:.test);data=db!.snapshot}catch{self.error=error.localizedDescription}}
         if area == .demo && !data.draws.contains(where:{$0.area == .demo}){do{try db!.merge(TestCatalog.demo(),area:.demo);data=db!.snapshot}catch{self.error=error.localizedDescription}}
@@ -97,17 +138,29 @@ import LineDrawCore
     func sync()async{
         guard accepted,!locked else{return};busy=true;syncing=true;defer{busy=false;syncing=false;syncTask=nil}
         do{
-            let selectedArea=area
-            let task=Task{switch selectedArea{case .website:return try await network.fetch();case .test:return TestCatalog.five();case .demo:return TestCatalog.demo()}}
+            let selectedArea=area;let selectedSource=catalogSource
+            let known=CatalogResolutionCache.build(db?.snapshot.draws ?? [])
+            let task=Task{
+                switch selectedArea{
+                case .website:
+                    if selectedSource == .funbox,let client=self.client,self.companionOnline {
+                        if let remote=try? await client.catalog(),!remote.isEmpty{return remote}
+                    }
+                    return try await self.network.fetch(source:selectedSource,known:known)
+                case .test:return TestCatalog.five()
+                case .demo:return TestCatalog.demo()
+                }
+            }
             syncTask=task;let rows=try await task.value;try Task.checkCancellation()
-            try db!.merge(rows,area:area);try db!.log("SYNC","清單同步完成，\(rows.count) 筆。")
-            data=db!.snapshot;selected=[];notice=area == .website ? data.syncSummary:"已載入\(area.title)"
+            try db!.merge(rows,area:selectedArea,source:selectedSource);try db!.log("SYNC","清單同步完成，\(rows.count) 筆。")
+            data=db!.snapshot;selected=[];notice=area == .website ? catalogSummary:"已載入\(area.title)"
         }catch{if syncTask?.isCancelled==true{notice="已取消同步，保留前次清單。";return};self.error=error.localizedDescription;try? db?.log("SYNC_FAILED","同步失敗，保留前次資料。");if let db{data=db.snapshot}}
     }
     func cancelSync(){syncTask?.cancel()}
     func mark(_ draw:Draw){guard accepted,!locked else{return};guard draw.canonicalURL != nil else{error="連結尚未解析，請先同步後再標記完成。";return};do{try db!.manual(draw,profile:profile);data=db!.snapshot;selected.remove(draw.id)}catch{self.error=error.localizedDescription}}
     func undo(_ record:ParticipationRecord){guard accepted,!locked else{return};do{try db!.undo(activityKey:record.id,profile:profile,area:area);data=db!.snapshot}catch{self.error=error.localizedDescription}}
     func open(_ draw:Draw)async{
+        if let issue=draw.syncIssue {error=issue;return}
         guard accepted,!locked,area != .demo else{return};busy=true;defer{busy=false}
         do{let raw=try await network.resolve(draw.url);guard let url=URL(string:raw) else{return};let opened=await UIApplication.shared.open(url);if !opened{error="無法開啟 LINE，請確認已安裝並登入 LINE。"}else{notice="已開啟活動；尚未標記完成。"}}catch{self.error=error.localizedDescription}
     }
@@ -145,7 +198,7 @@ import LineDrawCore
         busy=true;defer{busy=false}
         do{
             try await flushOutbox()
-            let request=CompanionStart(profile:profile,area:area,rows:allDraws.filter{!$0.archived},selectedIDs:selectedDraws.map(\.id),records:Array(records.values),filter:filter,autoFriend:data.settings.autoFriend,autoContinue:area == .website && data.settings.autoContinue)
+            let request=CompanionStart(profile:profile,area:area,rows:allDraws.filter{!$0.archived},selectedIDs:selectedDraws.map(\.id),records:Array(records.values),filter:filter,autoFriend:data.settings.autoFriend,autoContinue:area == .website && catalogSource == .funbox && data.settings.autoContinue)
             // One request only. A transport timeout is reconciled through status, never automatically resent.
             companion=try await client.start(request);companionOnline=true;selected=[]
             try db!.log("BATCH_STARTED","使用者開始批次，\(request.selectedIDs.count) 筆。");data=db!.snapshot
@@ -205,55 +258,160 @@ import LineDrawCore
             busy=false;deviceTask=nil
         }
     }
+    func startMissedScan(limit:Int?=nil){
+        guard accepted,!locked,deviceMode,area != .demo else{return}
+        let candidates=visible.filter{$0.runnable(at:now)}
+        let rows=limit.map{Array(candidates.prefix(max(0,$0)))} ?? candidates
+        guard !rows.isEmpty else{notice="目前篩選沒有可檢查的有效活動。";return}
+        busy=true;missedScanRunning=true;missedFindings=[];missedScanIndex=0;missedScanTotal=rows.count;missedScanSummary="準備掃描…"
+        deviceTask=Task{[self] in
+            let runtime=deviceRuntime ?? DeviceRuntime();deviceRuntime=runtime
+            runtime.onExpired={[weak self] in self?.deviceTask?.cancel()}
+            var completed=false
+            #if DEBUG
+            let started=ProcessInfo.processInfo.systemUptime
+            @MainActor func report(_ status:String){
+                guard ProcessInfo.processInfo.arguments.contains("--missed-scan") else{return}
+                let body:[String:Any]=["status":status,"summary":missedScanSummary,"index":missedScanIndex,"total":missedScanTotal,"elapsed":ProcessInfo.processInfo.systemUptime-started,"items":missedFindings.map{["product":$0.product,"store":$0.store,"status":$0.status,"totalSeconds":$0.totalSeconds,"openSeconds":$0.openSeconds,"querySeconds":$0.querySeconds,"decisionSeconds":$0.decisionSeconds,"reads":$0.reads] as [String:Any]},"requests":runtime.driver?.timings ?? [:],"phases":runtime.driver?.phaseTimings ?? [:]]
+                let file=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("missed-scan.json")
+                if let bytes=try? JSONSerialization.data(withJSONObject:body,options:[.prettyPrinted,.sortedKeys]){try? bytes.write(to:file,options:.atomic)}
+            }
+            report("starting")
+            #endif
+            do {
+                let driver=try await runtime.start{[weak self] in
+                    self?.missedScanSummary=$0
+                    #if DEBUG
+                    report("starting")
+                    #endif
+                }
+                // Navigation uses the same gate as taps; the scanner itself has no tap path.
+                driver.scanLookupMode=data.settings.scanLookupMode ?? "xml"
+                driver.canAct={!Task.isCancelled}
+                let began=ProcessInfo.processInfo.systemUptime
+                let scanner=MissedDrawScanner(driver:driver){[weak self] index,total,finding in
+                    guard let self else{return}
+                    self.missedScanIndex=index;self.missedScanTotal=total
+                    if let finding{self.missedFindings.append(finding)}
+                    self.missedScanSummary="掃描 \(index) / \(total)"
+                    #if DEBUG
+                    report("running")
+                    #endif
+                    var progress=DeviceBatchProgress();progress.total=total;progress.index=index;runtime.report(progress)
+                }
+                try await scanner.run(rows)
+                let seconds=ProcessInfo.processInfo.systemUptime-began
+                missedScanSummary="掃描完成 · \(String(format:"%.2f",seconds)) 秒 · 漏抽 \(missedFindings.filter{$0.status=="MISSED"}.count) 筆 · 待確認 \(missedFindings.filter{$0.status=="UNKNOWN" || $0.status=="NEEDS_FRIEND"}.count) 筆"
+                completed=true
+            }catch{
+                missedScanSummary="已停止 \(missedScanIndex)/\(missedScanTotal)：\(error is CancellationError ? runtime.cancellationMessage:error.localizedDescription)"
+            }
+            #if DEBUG
+            report(completed ? "completed":"stopped")
+            #endif
+            await runtime.stop(success:completed)
+            try? db?.log("MISSED_DRAW_SCAN",missedScanSummary)
+            let diagnostics=missedFindings.suffix(20).map{finding in Diagnostic(code:"MISSED_DRAW_TIMING",message:"\(finding.product) \(finding.status)；總計 \(String(format:"%.3f",finding.totalSeconds)) 秒；開頁 \(String(format:"%.3f",finding.openSeconds))；查詢 \(finding.reads) 次/\(String(format:"%.3f",finding.querySeconds)) 秒；判斷 \(String(format:"%.6f",finding.decisionSeconds)) 秒。")}
+            try? db?.logMany(diagnostics)
+            if let db{data=db.snapshot}
+            busy=false;missedScanRunning=false;deviceTask=nil
+        }
+    }
+    func stopMissedScan(){guard missedScanRunning else{return};deviceRuntime?.noteUserCancellation();deviceTask?.cancel()}
     func startDeviceBatch(){
-        let rows=selectedDraws;let original=allDraws;let frozenProfile=profile;let frozenArea=area;let frozenFilter=filter;let autoFriend=data.settings.autoFriend;let autoContinue=frozenArea == .website && data.settings.autoContinue
+        let rows=selectedDraws;let original=allDraws;let frozenProfile=profile;let frozenArea=area;let frozenSource=catalogSource;let frozenFilter=filter;let autoFriend=data.settings.autoFriend;let autoContinue=frozenArea == .website && data.settings.autoContinue
+        var continueBatch=autoContinue
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--real-speed-batch"){continueBatch=false}
+        #endif
         guard !rows.isEmpty else{return};busy=true;deviceStage="準備啟動…";selected=[]
         deviceTask=Task{[self] in
             let runtime=deviceRuntime ?? DeviceRuntime();deviceRuntime=runtime
             runtime.onExpired={[weak self] in self?.deviceBatch?.stop();self?.deviceTask?.cancel();self?.deviceStage="iOS 已結束背景工作。"}
             #if DEBUG
             let reportBegan=ProcessInfo.processInfo.systemUptime
+            var persistenceTimings=[[String:Any]]()
             @MainActor func saveBatchReport(){
-                guard ProcessInfo.processInfo.arguments.contains("--device-test-batch"),frozenArea == .test else{return}
+                let realSpeed=ProcessInfo.processInfo.arguments.contains("--real-speed-batch") && frozenArea == .website
+                guard realSpeed || (ProcessInfo.processInfo.arguments.contains("--device-test-batch") && frozenArea == .test) else{return}
                 let records=db?.records(profile:frozenProfile,area:frozenArea) ?? [:]
-                let body:[String:Any]=["build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","time":WireJSON.date(Date()),"state":deviceProgress.state,"reason":deviceProgress.reason,"completed":deviceProgress.index,"total":deviceProgress.total,"elapsed":ProcessInfo.processInfo.systemUptime-reportBegan,"statuses":rows.map{records[$0.activityKey]?.status ?? "PENDING"},"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"items":self.deviceBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"status":$0.status] as [String:Any]} ?? []]
-                let url=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("device-test-batch.json")
+                let body:[String:Any]=["build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","time":WireJSON.date(Date()),"state":deviceProgress.state,"reason":deviceProgress.reason,"completed":deviceProgress.index,"total":deviceProgress.total,"elapsed":ProcessInfo.processInfo.systemUptime-reportBegan,"statuses":rows.map{records[$0.activityKey]?.status ?? "PENDING"},"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"foregroundBundles":runtime.driver?.foregroundBundles ?? [:],"persistenceTimings":persistenceTimings,"observations":(try? JSONSerialization.jsonObject(with:JSONEncoder().encode(self.deviceBatch?.observations ?? []))) ?? [],"items":self.deviceBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"manualWait":$0.manualWait,"status":$0.status] as [String:Any]} ?? []]
+                let url=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent(realSpeed ? "real-speed-batch.json":"device-test-batch.json")
                 if let bytes=try? JSONSerialization.data(withJSONObject:body,options:.prettyPrinted){try? bytes.write(to:url,options:.atomic)}
             }
             #endif
             do{
                 let driver=try await runtime.start{[weak self] stage in self?.deviceStage=stage}
+                driver.batchLookupMode=data.settings.batchLookupMode ?? "standard"
                 driver.onRequestFailure={[weak self] message in try? self?.db?.log("WDA_REQUEST_FAILED",message)}
                 try Task.checkCancellation()
                 let batch=DeviceBatch(driver:driver,read:{[weak self] key in self?.db?.records(profile:frozenProfile,area:frozenArea)[key]},write:{[weak self] row,record in
                     guard let self else{throw CancellationError()};guard self.db != nil else{throw LineDrawError.message("本機資料不可用。")}
-                    try self.db!.update{$0.records[LocalDatabase.scope(profile:frozenProfile,area:frozenArea)+"\n"+row.activityKey]=record};self.data=self.db!.snapshot
+                    let began=ProcessInfo.processInfo.systemUptime
+                    try self.db!.update{$0.records[LocalDatabase.scope(profile:frozenProfile,area:frozenArea)+"\n"+row.activityKey]=record}
+                    let persisted=ProcessInfo.processInfo.systemUptime
+                    self.data=self.db!.snapshot
+                    #if DEBUG
+                    if persistenceTimings.count<1000 {
+                        let timing=self.db!.lastWriteTiming
+                        persistenceTimings.append(["status":record?.status ?? "removed","encode":timing.encodeSeconds,"write":timing.writeSeconds,"persist":persisted-began,"publish":ProcessInfo.processInfo.systemUptime-persisted])
+                    }
+                    #endif
                 },update:{[weak self] progress in
                     self?.deviceProgress=progress;runtime.report(progress)
                     #if DEBUG
                     saveBatchReport()
                     #endif
                 },fetch:{[weak self] in
-                    guard let self else{throw CancellationError()};let incoming=try await self.network.fetch();try Task.checkCancellation();try self.db!.merge(incoming,area:.website);self.data=self.db!.snapshot;return incoming
+                    guard let self else{throw CancellationError()}
+                    let known=CatalogResolutionCache.build(self.db?.snapshot.draws ?? [])
+                    let incoming=try await self.network.fetch(source:frozenSource,known:known);try Task.checkCancellation();try self.db!.merge(incoming,area:.website,source:frozenSource);self.data=self.db!.snapshot;return incoming
                 })
                 deviceBatch=batch;driver.canAct={[weak self] in self?.deviceProgress.state=="RUNNING" && !Task.isCancelled}
                 busy=false;deviceStage="手機自主執行中"
                 let queueBegan=ProcessInfo.processInfo.systemUptime
-                await batch.run(rows,allInitial:original,filter:frozenFilter,autoFriend:autoFriend,autoContinue:autoContinue)
+                await batch.run(rows,allInitial:original,filter:frozenFilter,autoFriend:autoFriend,autoContinue:continueBatch)
+                #if DEBUG
+                saveBatchReport()
+                #endif
                 let duration=ProcessInfo.processInfo.systemUptime-queueBegan
+                let traceFile=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("device-observations.json")
+                try? JSONEncoder().encode(batch.observations).write(to:traceFile,options:.atomic)
+                let traceSummary=batch.itemTimings.suffix(20).map{item -> Diagnostic in
+                    let rows=batch.observations.filter{$0.item==item.index}
+                    let counts=Dictionary(grouping:rows,by:{$0.reason+"/"+$0.navigationReason}).mapValues{$0.count}
+                    let summary=counts.keys.sorted().map{"\($0)=\(counts[$0]!)"}.joined(separator:"；")
+                    return Diagnostic(code:"DEVICE_OBSERVATION_SUMMARY",message:"第 \(item.index) 筆；人工等待 \(String(format:"%.2f",item.manualWait)) 秒；"+summary)
+                }
+                try? db?.logMany(traceSummary)
+                // Persist the exit cause before optional timing diagnostics.
+                // A long queue must not delay or evict the only termination record.
+                let stopReason=Task.isCancelled ? runtime.cancellationMessage:deviceProgress.reason
+                busy=true;deviceStage=stopReason
+                if deviceProgress.state=="STOPPED" {
+                    notice="批次已停止：\(deviceProgress.index)/\(deviceProgress.total)。\(stopReason)；可重新選取未完成活動開始。"
+                }
+                try db!.log("DEVICE_BATCH_FINISHED","狀態 \(deviceProgress.state)；完成位置 \(deviceProgress.index) / \(deviceProgress.total)；runtime=\(runtime.lastCode)；取消來源=\(Task.isCancelled ? runtime.cancellationSource:"none")。\(stopReason)")
+                data=db!.snapshot
                 let source=driver.timings["GET source"] ?? [:]
                 try? db?.log("DEVICE_TIMING","佇列 \(String(format:"%.2f",duration)) 秒；讀取畫面 \(Int(source["count"] ?? 0)) 次／\(String(format:"%.2f",source["seconds"] ?? 0)) 秒。")
-                for item in batch.itemTimings {
-                    try? db?.log("DEVICE_ITEM_TIMING","第 \(item.index) 筆 \(item.status)：總計 \(String(format:"%.2f",item.total)) 秒；開網址 \(String(format:"%.2f",item.open))；讀取 \(item.reads) 次／\(String(format:"%.2f",item.read))；點擊 \(String(format:"%.2f",item.tap))；保存 \(String(format:"%.2f",item.save))。")
+                let timingDetails=batch.itemTimings.suffix(20).map{item in
+                    Diagnostic(code:"DEVICE_ITEM_TIMING",message:"第 \(item.index) 筆 \(item.status)：總計 \(String(format:"%.2f",item.total)) 秒；開網址 \(String(format:"%.2f",item.open))；讀取 \(item.reads) 次／\(String(format:"%.2f",item.read))；點擊 \(String(format:"%.2f",item.tap))；保存 \(String(format:"%.2f",item.save))。")
                 }
+                try? db?.logMany(timingDetails)
                 let phases=driver.phaseTimings.keys.sorted().map{key in let value=driver.phaseTimings[key]!;return "\(key)=\(Int(value["count"] ?? 0))/\(String(format:"%.2f",value["seconds"] ?? 0))s"}.joined(separator:"；")
                 try? db?.log("DEVICE_PHASE_TIMING",phases)
+                let requests=driver.timings.keys.sorted().map{key in let value=driver.timings[key]!;return "\(key)=\(Int(value["count"] ?? 0))/\(String(format:"%.2f",value["seconds"] ?? 0))s"}.joined(separator:"；")
+                try? db?.log("DEVICE_REQUEST_TIMING",requests)
+
                 try? db?.log("DEVICE_LOOKUP",driver.lookupMode+"；直接開頁 \(driver.navigationCounts["directOpen",default:0])；畫面就緒 \(driver.navigationCounts["ready:settled",default:0]+driver.navigationCounts["ready:document",default:0])")
-                busy=true;deviceStage=deviceProgress.reason
-                try db!.log("DEVICE_BATCH_FINISHED","手機端批次結束；完成位置 \(deviceProgress.index) / \(deviceProgress.total)。\(deviceProgress.reason)");data=db!.snapshot
+                data=db!.snapshot
                 await runtime.stop(success:deviceProgress.state=="COMPLETED")
             }catch{
-                await runtime.stop(success:false);deviceStage=error is CancellationError ? runtime.cancellationMessage:error.localizedDescription
+                deviceStage=error is CancellationError ? runtime.cancellationMessage:error.localizedDescription
+                try? db?.log("DEVICE_BATCH_FAILED","runtime=\(runtime.lastCode)；位置 \(deviceProgress.index)/\(deviceProgress.total)。\(deviceStage)")
+                if let db {data=db.snapshot}
+                await runtime.stop(success:false)
                 if !(error is CancellationError){self.error=deviceStage}
             }
             busy=false;deviceBatch=nil;deviceTask=nil
@@ -279,7 +437,7 @@ import LineDrawCore
                     var value:[String:Any]=["operation":a.operation,"attempt":a.attempt,"seconds":a.seconds,"timedOut":a.timedOut]
                     if let code=a.errorCode{value["errorCode"]=code};return value
                 } ?? []
-                let body:[String:Any]=["schema":3,"build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","phase":phase,"runtimeCode":runtime.lastCode,"cancellationSource":status=="cancelled" ? runtime.cancellationSource:"none","faultMode":faultMode,"faultInjected":faultInjected,"inFlightOperation":runtime.driver?.inFlightOperation ?? "none","coldSafari":args.contains("--cold-fixture"),"requestAttempts":attempts,"fixtureRequests":fixture.requests,"status":status,"details":details,"elapsed":Date().timeIntervalSince(began),"startupSeconds":startupSeconds,"queueSeconds":queueSeconds,"completed":records.values.filter{$0.status=="SUBMITTED"}.count,"statuses":records.values.map(\.status),"acknowledged":fixture.acknowledged.sorted(),"acknowledgementCounts":fixture.acknowledgementCounts,"stages":stages,"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"items":measuredBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"status":$0.status] as [String:Any]} ?? [],"time":WireJSON.date(Date())]
+                let body:[String:Any]=["schema":3,"build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","phase":phase,"runtimeCode":runtime.lastCode,"cancellationSource":status=="cancelled" ? runtime.cancellationSource:"none","faultMode":faultMode,"faultInjected":faultInjected,"inFlightOperation":runtime.driver?.inFlightOperation ?? "none","coldSafari":args.contains("--cold-fixture"),"requestAttempts":attempts,"fixtureRequests":fixture.requests,"status":status,"details":details,"elapsed":Date().timeIntervalSince(began),"startupSeconds":startupSeconds,"queueSeconds":queueSeconds,"completed":records.values.filter{$0.status=="SUBMITTED"}.count,"statuses":records.values.map(\.status),"acknowledged":fixture.acknowledged.sorted(),"acknowledgementCounts":fixture.acknowledgementCounts,"stages":stages,"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"foregroundBundles":runtime.driver?.foregroundBundles ?? [:],"items":measuredBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"manualWait":$0.manualWait,"status":$0.status] as [String:Any]} ?? [],"time":WireJSON.date(Date())]
                 if let bytes=try? JSONSerialization.data(withJSONObject:body,options:.prettyPrinted){try? bytes.write(to:report,options:.atomic)}
             }
             save("running")
@@ -368,7 +526,7 @@ import LineDrawCore
                             if screen.navigationVerified,itemProgress.itemStep<2{itemProgress.itemStep=2;runtime.report(itemProgress)}
                             let decision=DeviceScreenRules.classify(screen)
                             if inspectNavigation {
-                                reviewObservations.append(["index":i,"elapsed":Date().timeIntervalSince(began),"decision":String(describing:decision),"bundle":screen.bundle,"pending":screen.navigationPending,"ready":screen.navigationVerified,"targeted":screen.targeted,"width":screen.width,"height":screen.height,"alerts":screen.nodes.filter{$0.type=="XCUIElementTypeAlert"}.map{["labels":$0.labels,"x":$0.rect.x,"y":$0.rect.y,"width":$0.rect.width,"height":$0.rect.height] as [String:Any]},"documentMatches":screen.nodes.filter{$0.type=="XCUIElementTypeWebView"}.flatMap(\.labels).compactMap{LinkPolicy.canonical($0)}.map{$0==url}])
+                                reviewObservations.append(["index":i,"elapsed":Date().timeIntervalSince(began),"decision":String(describing:decision),"bundle":screen.bundle,"pending":screen.navigationPending,"ready":screen.navigationVerified,"targeted":screen.targeted,"width":screen.width,"height":screen.height,"blockerEvidence":screen.nodes.flatMap(\.labels).filter{label in DeviceScreenRules.blockers.contains{label.lowercased().contains(DeviceScreenRules.normalize($0))}}.map{String($0.prefix(500))},"alerts":screen.nodes.filter{$0.type=="XCUIElementTypeAlert"}.map{["labels":$0.labels,"x":$0.rect.x,"y":$0.rect.y,"width":$0.rect.width,"height":$0.rect.height] as [String:Any]},"documentMatches":screen.nodes.filter{$0.type=="XCUIElementTypeWebView"}.flatMap(\.labels).compactMap{LinkPolicy.canonical($0)}.map{$0==url}])
                                 if reviewObservations.count>40{reviewObservations.removeFirst(reviewObservations.count-40)}
                                 save("running")
                             }
@@ -416,5 +574,5 @@ import LineDrawCore
     var batchActive:Bool{area == .demo ? demoRunning:deviceMode ? deviceProgress.locked:companion?.engine.locked ?? false}
     var startInstructions:String{deviceMode ? "請保持手機解鎖與 LocalDevVPN 連線。可從 iOS 工作進度取消，或回到 App 停止。":"請保持 Mac 開啟及手機解鎖；可在 Mac 控制台隨時停止。"}
     func clearDiagnostics(){change{$0.diagnostics=[]}}
-    var diagnosticsText:String{db?.diagnosticsText() ?? "尚無紀錄。"}
+    var diagnosticsText:String{db?.diagnosticsText(appVersion:AppVersion.display) ?? "尚無紀錄。"}
 }

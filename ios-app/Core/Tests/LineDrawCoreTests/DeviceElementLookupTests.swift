@@ -4,6 +4,20 @@ import CoreGraphics
 
 // Added with the fast-path implementation. Execution is pending user approval.
 final class DeviceElementLookupTests:XCTestCase {
+    func testNotWonPunctuationVariantsReachTargetedClassifier() throws {
+        let predicate = NSPredicate(format: DeviceElementLookup.predicate)
+        for label in ["可惜..沒有抽中！", "可惜...沒有抽中！", "可惜…沒有抽中！", "可惜⋯沒有抽中！", "可惜沒有抽中！", "可惜．． 沒有抽中 !"] {
+            XCTAssertTrue(predicate.evaluate(with: ["type":"XCUIElementTypeButton", "label":label, "name":label, "value":""]))
+            XCTAssertTrue(DeviceScreenRules.isRelevant(label))
+            var rows=payload(label:label);rows[2]["enabled"]=false
+            let screen=try DeviceElementLookup.screen(from:rows,bundle:DeviceScreenRules.lineBundle)
+            XCTAssertEqual(DeviceScreenRules.classify(screen), .terminal("COMPLETE"))
+            XCTAssertTrue(DeviceScreenRules.acceptsOCR(label,confidence:0.5,hasCouponContext:true))
+            XCTAssertFalse(DeviceScreenRules.acceptsOCR(label,confidence:0.5,hasCouponContext:false))
+            var unrelated=screen;unrelated.nodes.remove(at:1)
+            XCTAssertEqual(DeviceScreenRules.classify(unrelated), .wait)
+        }
+    }
     func testTargetedFailureDisablesFastQueryForTheRestOfSession(){
         var budget=DeviceLookupBudget();XCTAssertFalse(budget.preferFull)
         budget.recordFailure();XCTAssertTrue(budget.preferFull)

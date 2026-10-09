@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "4F3DF6BADEE2E6C14C6440E7"
+               BlueprintIdentifier = "2B744407FFF3E26CF7CDA0C7"
                BuildableName = "LineDraw.app"
                BlueprintName = "LineDraw"
                ReferencedContainer = "container:LineDraw.xcodeproj">
@@ -30,7 +30,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "4F3DF6BADEE2E6C14C6440E7"
+            BlueprintIdentifier = "2B744407FFF3E26CF7CDA0C7"
             BuildableName = "LineDraw.app"
             BlueprintName = "LineDraw"
             ReferencedContainer = "container:LineDraw.xcodeproj">
@@ -41,7 +41,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "71EB5B6C0C8C9337E2DE9CF5"
+               BlueprintIdentifier = "45AE2BA11A8F321849EDA47B"
                BuildableName = "LineDrawUITests.xctest"
                BlueprintName = "LineDrawUITests"
                ReferencedContainer = "container:LineDraw.xcodeproj">
@@ -63,7 +63,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "4F3DF6BADEE2E6C14C6440E7"
+            BlueprintIdentifier = "2B744407FFF3E26CF7CDA0C7"
             BuildableName = "LineDraw.app"
             BlueprintName = "LineDraw"
             ReferencedContainer = "container:LineDraw.xcodeproj">
@@ -80,7 +80,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "4F3DF6BADEE2E6C14C6440E7"
+            BlueprintIdentifier = "2B744407FFF3E26CF7CDA0C7"
             BuildableName = "LineDraw.app"
             BlueprintName = "LineDraw"
             ReferencedContainer = "container:LineDraw.xcodeproj">

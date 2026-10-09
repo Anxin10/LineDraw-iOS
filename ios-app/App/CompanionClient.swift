@@ -4,7 +4,7 @@ import CryptoKit
 import LineDrawCore
 
 struct KeychainStore {
-    static let service="com.beybladehunter.linedraw.ios.companion"
+    static let service="com.lanxinan.linedraw.ios.companion"
     static func save(_ data:Data)throws{
         let query:[String:Any]=[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:"pairing",kSecAttrSynchronizable as String:false]
         let update=SecItemUpdate(query as CFDictionary,[kSecValueData as String:data] as CFDictionary)
@@ -77,5 +77,6 @@ final class CompanionClient:@unchecked Sendable{
         struct Reply:Decodable{var ok:Bool}
         let _:Reply=try await send("/v1/records",body:WireJSON.encoder().encode(mutations))
     }
+    func catalog()async throws->[Draw]{try await send("/v1/catalog")}
     func unpair()async throws{struct Reply:Decodable{var ok:Bool};let _:Reply=try await send("/v1/unpair",body:Data("{}".utf8))}
 }

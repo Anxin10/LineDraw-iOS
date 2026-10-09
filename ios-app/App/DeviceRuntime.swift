@@ -6,8 +6,8 @@ import LineDrawCore
 import LineDrawDeviceBridge
 
 @MainActor final class DeviceRuntime {
-    static let runner="com.beybladehunter.linedraw.DeviceRunner.xctrunner"
-    static let taskID="com.beybladehunter.linedraw.ios.deviceBatch"
+    static let runner="com.lanxinan.linedraw.DeviceRunner.xctrunner"
+    static let taskID="com.lanxinan.linedraw.ios.deviceBatch"
     private var background:BGContinuedProcessingTask?
     private var requested=false
     private var expired=false
@@ -34,13 +34,32 @@ import LineDrawDeviceBridge
     }
     private func expire(){expired=true;lastCode="BACKGROUND_TASK_ENDED";onExpired?();ld_stop();background?.setTaskCompleted(success:false);background=nil}
     func start(onStage:@escaping(String)->Void)async throws->LocalWDA{
+        for attempt in 0..<2 {
+            do{return try await startOnce(onStage:onStage)}
+            catch {
+                guard RunnerStartupRecovery.shouldRetry(code:lastCode,attempt:attempt,cancelled:Task.isCancelled || expired || userCancelled,appActive:UIApplication.shared.applicationState == .active,sessionEstablished:lastCode=="READY") else{throw error}
+                // startOnce has closed its session/bridge/background request.
+                // No batch or tap command has been issued at this point.
+                onStage("Runner 啟動未完成，清理後重試一次…")
+                try await Task.sleep(for:.seconds(1))
+                try Task.checkCancellation()
+                guard !expired,!userCancelled else{throw CancellationError()}
+            }
+        }
+        throw LineDrawError.message(Self.message(lastCode))
+    }
+    private func startOnce(onStage:@escaping(String)->Void)async throws->LocalWDA{
         guard UIApplication.shared.applicationState == .active else{throw LineDrawError.message("請回到 App 按下開始。")}
         guard let bytes=try DeviceSecrets.load() else{throw LineDrawError.message("請先在「手機自主模式」完成手機配對。")}
         expired=false;userCancelled=false;work=DeviceWorkProgress();lastWorkPublish=0;lastCode="PREPARING";requested=true
         let request=BGContinuedProcessingTaskRequest(identifier:Self.taskID,title:"LineDraw 抽選",subtitle:"準備手機自主執行")
         request.strategy = .fail
         do{
-            try await BGTaskScheduler.shared.submitTaskRequest(request)
+            if #available(iOS 27.0, *) {
+                try await BGTaskScheduler.shared.submitTaskRequest(request)
+            } else {
+                try BGTaskScheduler.shared.submit(request)
+            }
             let deadline=Date().addingTimeInterval(10)
             while background==nil {try Task.checkCancellation();guard Date()<deadline,!expired else{throw LineDrawError.message("iOS 尚未允許本次背景工作，請稍後再試。")};try await Task.sleep(for:.milliseconds(100))}
             try await DDIManager.prepare(onStage:onStage)
@@ -104,7 +123,7 @@ import LineDrawDeviceBridge
 
 // Credentials are never stored in JSON, UserDefaults, documents, diagnostics, or exports.
 @MainActor enum DeviceSecrets {
-    static let service="com.beybladehunter.linedraw.device-pairing"
+    static let service="com.lanxinan.linedraw.device-pairing"
     static var query:[String:Any]{[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:"local-device"]}
     static func load()throws->Data?{var q=query;q[kSecReturnData as String]=true;var result:CFTypeRef?;let status=SecItemCopyMatching(q as CFDictionary,&result);if status==errSecItemNotFound{return nil};guard status==errSecSuccess else{throw LineDrawError.message("無法讀取配對檔。請解鎖手機。")};return result as? Data}
     static func save(_ data:Data)throws{

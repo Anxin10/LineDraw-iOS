@@ -3,6 +3,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
 export CARGO_TARGET_DIR="$ROOT/.runtime/rust-target"
+export IPHONEOS_DEPLOYMENT_TARGET=26.0
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 for TARGET in aarch64-apple-ios aarch64-apple-ios-sim; do
   cargo build --manifest-path "$ROOT/DeviceBridge/Cargo.toml" --locked --release --target "$TARGET"

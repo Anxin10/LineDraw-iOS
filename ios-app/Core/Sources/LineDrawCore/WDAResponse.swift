@@ -8,6 +8,7 @@ public struct WDAResponseFailure:LocalizedError,Sendable {
     public let status:Int
     public let code:String
     public let remoteMessage:String
+    public init(operation:String,status:Int,code:String,remoteMessage:String){self.operation=operation;self.status=status;self.code=code;self.remoteMessage=remoteMessage}
     public var canRetryRead:Bool {
         if ["invalid session id","invalid argument","unsupported operation"].contains(code){return false}
         return [200,404,500,502,503,504].contains(status) && ["unknown error","timeout","stale element reference","no such element","no such window","invalid JSON","missing value","unexpected value","HTTP error"].contains(code)
@@ -27,6 +28,7 @@ public enum WDAResponse {
         guard (200..<300).contains(status) else{throw failure("HTTP error")}
         guard let value=json["value"] else{throw failure("missing value")}
         if operation=="GET source",!(value is String) || (value as? String)?.isEmpty==true{throw failure("unexpected value")}
+        if operation=="GET source.json",!(value is [String:Any]){throw failure("unexpected value")}
         if operation=="GET wda/activeAppInfo",((value as? [String:Any])?["bundleId"] as? String)?.isEmpty != false{throw failure("unexpected value")}
         return value // WDA acknowledges successful actions with JSON null.
     }

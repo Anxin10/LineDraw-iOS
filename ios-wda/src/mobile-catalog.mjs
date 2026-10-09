@@ -14,14 +14,39 @@ export function schedule(label){
  const remaining=tail.slice(first.index+first[0].length);const end=new RegExp('^\\s*[~～至到－—–-]\\s*'+date,'u').exec(remaining);
  const startAt=parse(first),endAt=parse(end);if(startAt&&endAt&&Date.parse(endAt)<=Date.parse(startAt))throw new Error('抽選起訖時間衝突。');return[startAt,endAt];
 }
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CACHE_PATH = path.resolve(__dirname, '../data/catalog-cache.json');
+
+async function loadCache() {
+ try {
+  const raw = await fs.readFile(CACHE_PATH, 'utf8');
+  return JSON.parse(raw);
+ } catch {
+  return {};
+ }
+}
+
+async function saveCache(cache) {
+ try {
+  await fs.mkdir(path.dirname(CACHE_PATH), {recursive: true});
+  await fs.writeFile(CACHE_PATH, JSON.stringify(cache, null, 2), 'utf8');
+ } catch {}
+}
+
 export function parseWebsite(html){
  if(Buffer.byteLength(html)>2_000_000)throw new Error('來源頁面過大。');
  const $=load(html);const stores=$('#page-draws .draw-store');if(!stores.length)throw new Error('找不到抽選區，保留前次清單。');
  const rows=[],seen=new Set();
  for(const store of stores.toArray()){
   const node=$(store),name=node.find('.draw-store-name').first().text().trim(),city=node.attr('data-draw-city')||'未分類',timeLabel=node.find('.draw-start').first().text();
-  const items=node.find('.draw-item[data-draw-id][data-draw-href]'),[startsAt,endsAt]=schedule(timeLabel);
-  if(!name||name.length>=200||!items.length||items.length!==node.find('.draw-item').length)throw new Error('店家抽選資料不完整。');
+  const items=node.find('.draw-item[data-draw-id][data-draw-href]');
+  if(!name||!items.length)continue;
+  if(name.length>=200)throw new Error('店家名稱異常。');
+  const [startsAt,endsAt]=schedule(timeLabel);
   for(const item of items.toArray()){
    const n=$(item),sourceID=(n.attr('data-draw-id')||'').trim(),url=(n.attr('data-draw-href')||'').trim(),product=n.find('.draw-product').first().text().trim();
    if(!sourceID||seen.has(sourceID)||!product||product.length>=500||!allowed(url))throw new Error('抽選列缺漏、重複或網址異常。');seen.add(sourceID);
@@ -35,14 +60,40 @@ async function limited(response,limit){let size=0;const chunks=[];for await(cons
 export async function resolveLink(raw,fetchImpl=fetch,signal){
  let url=raw;const seen=new Set();for(let i=0;i<5;i++){
   if(canonical(url))return canonical(url);if(!allowed(url)||seen.has(url))throw new Error('抽選連結導向異常。');seen.add(url);
-  const response=await fetchImpl(url,{redirect:'manual',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)});await response.body?.cancel();
+  let response;
+  try {
+   response = await fetchImpl(url, {method:'HEAD', redirect:'manual', signal:signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
+   await response.body?.cancel();
+   if(response.status<300||response.status>=400){
+    response = await fetchImpl(url, {redirect:'manual', signal:signal?AbortSignal.any([signal,AbortSignal.timeout(10000)]):AbortSignal.timeout(10000)});
+    await response.body?.cancel();
+   }
+  }catch{
+   response = await fetchImpl(url, {redirect:'manual', signal:signal?AbortSignal.any([signal,AbortSignal.timeout(10000)]):AbortSignal.timeout(10000)});
+   await response.body?.cancel();
+  }
   const location=response.headers.get('location');if(response.status<300||response.status>=400||!location)throw new Error('連結尚無法解析。');url=new URL(location,url).href;
  }throw new Error('抽選連結重新導向過多。');
 }
 export async function fetchWebsite(fetchImpl=fetch,{signal}={}){
  const response=await fetchImpl(WEBSITE,{redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000)});if(!response.ok)throw new Error('網站同步失敗。');
- const rows=parseWebsite(await limited(response,2_000_000));const unique=[...new Set(rows.map(x=>x.url))],resolved=new Map();
- for(let i=0;i<unique.length;i+=4){signal?.throwIfAborted();const results=await Promise.allSettled(unique.slice(i,i+4).map(async u=>[u,await resolveLink(u,fetchImpl,signal)]));for(const result of results)if(result.status==='fulfilled')resolved.set(...result.value);}
+ const rows=parseWebsite(await limited(response,2_000_000));
+ const cache=await loadCache();
+ const resolved=new Map(Object.entries(cache));
+ const unique=[...new Set(rows.map(x=>x.url))].filter(u=>!resolved.has(u));
+ if(unique.length>0){
+  for(let i=0;i<unique.length;i+=16){
+   signal?.throwIfAborted();
+   const results=await Promise.allSettled(unique.slice(i,i+16).map(async u=>[u,await resolveLink(u,fetchImpl,signal)]));
+   for(const result of results){
+    if(result.status==='fulfilled'&&result.value[1]){
+     resolved.set(...result.value);
+     cache[result.value[0]]=result.value[1];
+    }
+   }
+  }
+  await saveCache(cache);
+ }
  signal?.throwIfAborted();
  for(const row of rows){const url=resolved.get(row.url);if(url){row.canonicalURL=url;const p=new URL(url).pathname.split('/');row.activityKey=`coupon:${p[1]}:${p[3]}`;}}
  const owners=new Map();for(const row of rows){if(owners.has(row.activityKey)&&owners.get(row.activityKey)!==row.store)throw new Error('同一活動的店家資料衝突。');owners.set(row.activityKey,row.store);}return rows;

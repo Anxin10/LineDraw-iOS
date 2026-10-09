@@ -23,7 +23,7 @@ struct RootView:View{
         }
         .transaction{if systemReduceMotion || model.data.settings.reduceMotion{$0.disablesAnimations=true;$0.animation=nil}}
         .alert("提醒",isPresented:Binding(get:{model.error != nil},set:{if !$0{model.error=nil}})){Button("知道了",role:.cancel){model.error=nil}}message:{Text(model.error ?? "")}
-        .task(id:scenePhase){guard scenePhase == .active else{return};while !Task.isCancelled{model.now=Date();await model.poll();try? await Task.sleep(for:.seconds(3))}}
+        .task(id:scenePhase){guard scenePhase == .active else{return};var ticks=0;while !Task.isCancelled{ticks+=1;if ticks%10==0{model.now=Date()};await model.poll();try? await Task.sleep(for:.seconds(3))}}
         .sheet(isPresented:$showDeviceSetup){NavigationStack{DeviceSetupView().toolbar{ToolbarItem(placement:.confirmationAction){Button("完成"){showDeviceSetup=false}}}}}
         .onOpenURL{url in
             guard model.accepted,url.scheme=="linedraw" else{return}

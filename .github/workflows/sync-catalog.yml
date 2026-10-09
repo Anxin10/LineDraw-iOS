@@ -1,0 +1,38 @@
+name: Sync Catalog
+
+on:
+  schedule:
+    # Run every 6 hours automatically
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          cd ios-wda
+          npm ci || npm install
+
+      - name: Resolve and generate catalog.json
+        run: |
+          node scripts/sync-catalog.mjs
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add catalog.json ios-wda/data/catalog-cache.json
+          git diff --staged --quiet || (git commit -m "chore(catalog): auto-update catalog.json [skip ci]" && git push)

@@ -30,6 +30,10 @@ public struct DeviceScreen:Sendable {
     public var targeted:Bool
     public var navigationVerified:Bool
     public var navigationPending:Bool
+    public var navigationReason:String="unknown"
+    public var lookupMode:String="unknown"
+    public var nativeQuerySeconds:Double?
+    public var nativeMetrics:[String:Double]?
     public init(bundle:String,width:Double,height:Double,nodes:[ScreenNode],targeted:Bool=false,navigationVerified:Bool=false,navigationPending:Bool=false){self.bundle=bundle;self.width=width;self.height=height;self.nodes=nodes;self.targeted=targeted;self.navigationVerified=navigationVerified;self.navigationPending=navigationPending}
     public var fingerprint:String{LinkPolicy.digest(nodes.filter{!["XCUIElementTypeApplication","XCUIElementTypeWindow"].contains($0.type)}.map{"\($0.type)|\($0.labels)|\($0.rect)|\($0.enabled)"}.joined(separator:"\n"))}
     /// Shared by full XML and targeted observations. Changing lookup strategy is
@@ -54,10 +58,24 @@ public enum DeviceScreenRules {
     public static let claimed=["使用優惠券","查看已領取的優惠券"]
     public static let participated=["您已參加過此抽選","已參加過抽獎","已抽過"]
     public static let completed=["恭喜中獎","恭喜您中獎了","恭喜獲得優惠券","很可惜，未中獎","未中獎","未抽中","銘謝惠顧","抽選完成","抽獎完成"]
+    // LINE and OCR render the same disabled result with different ellipses.
+    public static let notWon=["可惜..沒有抽中！","可惜...沒有抽中！","可惜…沒有抽中！","可惜⋯沒有抽中！","可惜沒有抽中！"]
     public static let blockers=["驗證碼","验证码","captcha","登入","登录","解除封鎖","授權存取","同意條款","付款"]
-    public static var observationLabels:[String]{actions+couponHeaders+claimed+participated+completed+["已結束","可惜...沒有抽中！","官方帳號","已加入好友","聊天","關閉","Close","关闭"]}
+    public static var observationLabels:[String]{actions+couponHeaders+claimed+participated+completed+notWon+["已結束","官方帳號","已加入好友","聊天","關閉","Close","关闭"]}
     private static let normalizedObservationLabels=Set(observationLabels.map(normalize))
     private static let normalizedBlockers=blockers.map(normalize)
+    private static func requiresManualHandling(_ node:ScreenNode)->Bool {
+        node.labels.contains { label in
+            var text=normalize(label).lowercased()
+            // Funbox redemption instructions mention desktop login as a
+            // prohibited redemption method, not an interactive login prompt.
+            // Remove only that phrase in descriptive text with both cues.
+            if node.type=="XCUIElementTypeStaticText",text.contains("不得"),text.contains("兌換"),text.contains("電腦版登入") {
+                text=text.replacingOccurrences(of:"電腦版登入",with:"")
+            }
+            return normalizedBlockers.contains{text.contains($0)}
+        }
+    }
     public static func isRelevant(_ text:String)->Bool {
         let value=normalize(text)
         return normalizedObservationLabels.contains(value) || normalizedBlockers.contains{value.lowercased().contains($0)}
@@ -69,7 +87,7 @@ public enum DeviceScreenRules {
         // an exact known action/result; two observations and a fresh pre-tap
         // OCR still apply. Unknown words never receive this allowance.
         guard hasCouponContext,confidence>=0.5 else{return false}
-        let allowed=actions+claimed+["已結束"]
+        let allowed=actions+claimed+notWon+["已結束"]
         return allowed.contains{normalize($0)==normalize(text)}
     }
     public static func stabilityKey(_ screen:DeviceScreen,decision:ScreenDecision)->String {
@@ -88,9 +106,9 @@ public enum DeviceScreenRules {
     public static func allowsSingleObservation(_ screen:DeviceScreen,decision:ScreenDecision)->Bool {
         guard screen.navigationVerified,case .click(_,let node)=decision,
               !node.ocr,node.type=="XCUIElementTypeButton",node.enabled,
-              node.rect.isInside(width:screen.width,height:screen.height),node.rect.y>=screen.height*0.60,
-              screen.nodes.flatMap(\.labels).contains(where:{couponHeaders.map(normalize).contains(normalize($0))}) else{return false}
-        return true
+              node.rect.isInside(width:screen.width,height:screen.height),node.rect.y>=screen.height*0.60 else{return false}
+        let hasHeader=screen.nodes.flatMap(\.labels).contains(where:{couponHeaders.map(normalize).contains(normalize($0))})
+        return hasHeader || screen.targeted
     }
     static func matches(_ screen:DeviceScreen,_ labels:[String],bottom:Bool=true,disabled:Bool=false)->[ScreenNode]{
         let names=labels.map(normalize)
@@ -116,9 +134,9 @@ public enum DeviceScreenRules {
         if coupon {
             if !matches(screen,["已結束"],disabled:true).isEmpty{return .terminal("ENDED")}
             if !matches(screen,claimed,disabled:true).isEmpty || has(participated){return .terminal("ALREADY")}
-            if has(completed) || !matches(screen,["可惜...沒有抽中！"],disabled:true).isEmpty{return .terminal("COMPLETE")}
+            if has(completed) || !matches(screen,notWon,disabled:true).isEmpty{return .terminal("COMPLETE")}
         }
-        if texts.contains(where:{text in blockers.contains{text.lowercased().contains(normalize($0))}}){return .pause("需要登入、驗證或其他人工處理。")}
+        if screen.nodes.contains(where:requiresManualHandling){return .pause("需要登入、驗證或其他人工處理。")}
         let candidates=matches(screen,actions)
         if candidates.count>1{return .pause("底部有多個操作目標，請確認畫面。")}
         func action(_ n:ScreenNode)->ScreenDecision{
@@ -139,21 +157,6 @@ public enum DeviceScreenRules {
         return list.count==1 ? list[0]:nil
     }
     public static func parse(_ xml:String)throws->[ScreenNode]{
-        guard xml.utf8.count<8_000_000,!xml.uppercased().contains("<!DOCTYPE"),!xml.uppercased().contains("<!ENTITY"),let bytes=xml.data(using:.utf8) else{throw LineDrawError.message("畫面資料不合法。")}
-        let delegate=ScreenParser();let parser=XMLParser(data:bytes);parser.shouldResolveExternalEntities=false;parser.delegate=delegate
-        guard parser.parse() else{throw LineDrawError.message("畫面資料無法解析。")};return delegate.nodes
+        try XMLScreenParser.parse(xml,requireApplication:false)
     }
-}
-private final class ScreenParser:NSObject,XMLParserDelegate{
-    var nodes=[ScreenNode]();var stack=[(visible:Bool,web:ScreenRect?)]()
-    func parser(_ parser:XMLParser,didStartElement name:String,namespaceURI:String?,qualifiedName:String?,attributes a:[String:String]){
-        let parent=stack.last ?? (true,nil);let visible=parent.visible && a["visible"] != "false" && name != "XCUIElementTypeStatusBar"
-        let r=ScreenRect(x:Double(a["x"] ?? "") ?? 0,y:Double(a["y"] ?? "") ?? 0,width:Double(a["width"] ?? "") ?? 0,height:Double(a["height"] ?? "") ?? 0)
-        let labels=["label","name","value"].compactMap{a[$0]}.filter{!$0.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty}.reduce(into:[String]()){if !$0.contains($1){$0.append($1)}}
-        if visible && name.hasPrefix("XCUIElementType"){nodes.append(ScreenNode(type:a["type"] ?? name,labels:labels,rect:r,enabled:a["enabled"] != "false"))}
-        let web=name=="XCUIElementTypeWebView" && visible ? r:parent.web
-        let wrapper=parent.visible && name=="XCUIElementTypeOther" && a["visible"]=="false" && a["accessible"]=="false" && labels.isEmpty && web != nil && r==web && r.width>0
-        stack.append((visible || wrapper,web))
-    }
-    func parser(_ parser:XMLParser,didEndElement:String,namespaceURI:String?,qualifiedName:String?){if !stack.isEmpty{stack.removeLast()}}
 }

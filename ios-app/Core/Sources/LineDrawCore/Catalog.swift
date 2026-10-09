@@ -20,6 +20,21 @@ public enum DrawSchedule {
         return actual==components ? date:nil
     }
 }
+/// Repeated URLs are valid across current, archived and test rows.
+public enum CatalogResolutionCache {
+    public static func build(_ draws:[Draw])->[String:String] {
+        var result=[String:String]();var conflicts=Set<String>()
+        for draw in draws {
+            guard let canonical=draw.canonicalURL,LinkPolicy.canonical(canonical)==canonical,
+                  !conflicts.contains(draw.url) else{continue}
+            if let previous=result[draw.url],previous != canonical {
+                result.removeValue(forKey:draw.url);conflicts.insert(draw.url)
+            }else{result[draw.url]=canonical}
+        }
+        return result
+    }
+}
+
 public enum CatalogParser {
     public static let sourceURL=URL(string:"https://uxux11.github.io/funbox-line/")!
     public static func parse(_ html: String) throws -> [Draw] {
@@ -28,15 +43,54 @@ public enum CatalogParser {
         guard !stores.isEmpty() else{throw LineDrawError.message("找不到抽選區，保留前次清單。")}
         var result:[Draw]=[];var seen=Set<String>()
         for store in stores.array() {
-            let name=try store.select(".draw-store-name").first()?.text().trimmingCharacters(in:.whitespacesAndNewlines) ?? ""
-            let city=try store.attr("data-draw-city");let label=try store.select(".draw-start").first()?.text() ?? ""
-            let (start,end)=try DrawSchedule.parse(label);let rows=try store.select(".draw-item[data-draw-id][data-draw-href]")
-            guard !name.isEmpty,name.count<200,!rows.isEmpty(),rows.size()==(try store.select(".draw-item").size()) else{throw LineDrawError.message("店家抽選資料不完整，保留前次清單。")}
+            let name = try store.select(".draw-store-name")
+                .first()?.text()
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            let city = try store.attr("data-draw-city")
+            let label = try store.select(".draw-start").first()?.text() ?? ""
+            let (start, end) = try DrawSchedule.parse(label)
+            let rows = try store.select(".draw-item")
+
+            // 沒有名稱或沒有抽選商品的店家區塊直接略過，
+            // 不要讓單一異常店家造成整份同步失敗。
+            if name.isEmpty || rows.isEmpty() {
+                continue
+            }
+
+            // 明顯異常的資料仍然拒絕。
+            guard name.count < 200 else {
+                throw LineDrawError.message("店家名稱異常，保留前次清單。")
+            }
             for row in rows.array() {
-                let sourceID=try row.attr("data-draw-id").trimmingCharacters(in:.whitespacesAndNewlines)
-                let url=try row.attr("data-draw-href").trimmingCharacters(in:.whitespacesAndNewlines)
-                let product=try row.select(".draw-product").first()?.text() ?? ""
-                guard !sourceID.isEmpty,seen.insert(sourceID).inserted,!product.isEmpty,product.count<500,LinkPolicy.allowed(url) else{throw LineDrawError.message("抽選列缺漏、重複或連結異常，保留前次清單。")}
+                var sourceID = try row.attr("data-draw-id")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let url = try row.attr("data-draw-href")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let product = try row.select(".draw-product")
+                    .first()?.text()
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+                // The source mixes explicit shelf-sale notices with lottery entries.
+                // Omit only notices without any link metadata, never malformed draws.
+                let shelfSale = product.contains("（採取上架販售）") || product.contains("(採取上架販售)")
+                if shelfSale && !row.hasAttr("data-draw-id") && !row.hasAttr("data-draw-href") {
+                    if try row.select("a[href], [data-draw-href]").isEmpty() { continue }
+                }
+                // Some current source rows have valid links but no DOM ID.
+                // Derive identity from content, never row order or randomized hashing.
+                if sourceID.isEmpty, !product.isEmpty, LinkPolicy.allowed(url) {
+                    let identity=try JSONEncoder().encode([name,product,url])
+                    sourceID="derived:"+LinkPolicy.digest(String(decoding:identity,as:UTF8.self))
+                }
+                guard !sourceID.isEmpty else {
+                    throw LineDrawError.message("抽選列 ID 與有效連結缺漏，保留前次清單。")
+                }
+                guard seen.insert(sourceID).inserted, !product.isEmpty, product.count < 500, LinkPolicy.allowed(url) else {
+                    throw LineDrawError.message("抽選列缺漏、重複或連結異常，保留前次清單。")
+                }
                 result.append(Draw(id:sourceID+":"+String(LinkPolicy.digest(url).prefix(16)),activityKey:LinkPolicy.key(url,store:name,period:label),store:name,city:city.isEmpty ? "未分類":city,product:product,url:url,canonicalURL:LinkPolicy.canonical(url),timeLabel:label,startsAt:start,endsAt:end,ordinal:result.count))
             }
         }
@@ -45,43 +99,95 @@ public enum CatalogParser {
 }
 /// Refuse redirects before dispatch so a source link cannot send requests to unrelated hosts.
 public final class CatalogNetwork: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    public override init(){super.init()}
+    private var sharedSession: URLSession!
+    public override init() {
+        super.init()
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 8
+        config.timeoutIntervalForResource = 12
+        config.httpCookieStorage = nil
+        config.urlCache = nil
+        self.sharedSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    }
     public func urlSession(_ session:URLSession,task:URLSessionTask,willPerformHTTPRedirection response:HTTPURLResponse,newRequest request:URLRequest,completionHandler:@escaping(URLRequest?)->Void){completionHandler(nil)}
+    private func head(_ url:URL) async throws -> HTTPURLResponse {
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.setValue("LineDraw-OpenSource/1.0", forHTTPHeaderField: "User-Agent")
+        let (_, response) = try await sharedSession.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw LineDrawError.message("來源回應異常。") }
+        return http
+    }
     private func get(_ url:URL,limit:Int) async throws -> (Data,HTTPURLResponse) {
-        let config=URLSessionConfiguration.ephemeral;config.timeoutIntervalForRequest=15;config.timeoutIntervalForResource=20;config.httpCookieStorage=nil;config.urlCache=nil
-        let session=URLSession(configuration:config,delegate:self,delegateQueue:nil);defer{session.invalidateAndCancel()}
         var request=URLRequest(url:url);request.setValue("LineDraw-OpenSource/1.0",forHTTPHeaderField:"User-Agent")
-        let (bytes,response)=try await session.bytes(for:request)
+        let (data,response)=try await sharedSession.data(for:request)
         guard let http=response as? HTTPURLResponse else{throw LineDrawError.message("來源回應異常。")}
-        var data=Data();for try await byte in bytes { if data.count>=limit{throw LineDrawError.message("來源回應過大。")};data.append(byte) };return(data,http)
+        if data.count>limit{throw LineDrawError.message("來源回應過大。")}
+        return(data,http)
     }
     public func resolve(_ raw:String) async throws -> String {
         if let canonical=LinkPolicy.canonical(raw){return canonical}
         var current=raw;var seen=Set<String>()
         for _ in 0..<5 {
             guard LinkPolicy.allowed(current),seen.insert(current).inserted,let url=URL(string:current) else{throw LineDrawError.message("抽選連結導向異常。")}
-            let (_,response)=try await get(url,limit:200_000)
+            var response: HTTPURLResponse
+            do {
+                response = try await head(url)
+                if !(300...399).contains(response.statusCode) {
+                    let (_, fallback) = try await get(url, limit: 100_000)
+                    response = fallback
+                }
+            } catch {
+                let (_, fallback) = try await get(url, limit: 100_000)
+                response = fallback
+            }
             guard (300...399).contains(response.statusCode),let location=response.value(forHTTPHeaderField:"Location"),let next=URL(string:location,relativeTo:url)?.absoluteURL.absoluteString,LinkPolicy.allowed(next) else{throw LineDrawError.message("連結尚無法解析，請稍後同步。")}
             if let canonical=LinkPolicy.canonical(next){return canonical};current=next
         };throw LineDrawError.message("抽選連結重新導向過多。")
     }
-    public func fetch() async throws -> [Draw] {
-        let (data,response)=try await get(CatalogParser.sourceURL,limit:2_000_000)
-        guard response.statusCode==200,let html=String(data:data,encoding:.utf8) else{throw LineDrawError.message("同步失敗，保留前次清單。")}
-        var rows=try CatalogParser.parse(html)
-        // Four concurrent redirects, in original source order. Failed resolutions remain visible but cannot run.
-        var resolved:[String:String]=[:];let unique=Array(Set(rows.map(\.url))).sorted()
-        for offset in stride(from:0,to:unique.count,by:4){try Task.checkCancellation();let chunk=Array(unique[offset..<min(offset+4,unique.count)])
-            await withTaskGroup(of:(String,String?).self){group in
-                for url in chunk { group.addTask{ (url,try? await self.resolve(url)) } }
-                for await (url,value) in group { if let value{resolved[url]=value} }
+    public func fetch(source:CatalogSource = .funbox,known:[String:String]=[:]) async throws -> [Draw] {
+        let (data,response)=try await get(source.dataURL,limit:2_000_000)
+        guard response.statusCode==200 else{throw LineDrawError.message("同步失敗，保留前次清單。")}
+        if source == .funbox,let direct=try? WireJSON.decoder().decode([Draw].self,from:data),!direct.isEmpty{return direct}
+        guard let html=String(data:data,encoding:.utf8) else{throw LineDrawError.message("同步失敗，保留前次清單。")}
+        var rows=try source.parse(html)
+        var resolved:[String:String]=[:]
+        for row in rows {
+            if let canonical=known[row.url],LinkPolicy.canonical(canonical)==canonical {
+                resolved[row.url]=canonical
+            }
+        }
+        let unique=Array(Set(rows.map(\.url).filter{resolved[$0]==nil})).sorted()
+        if !unique.isEmpty {
+            for offset in stride(from:0,to:unique.count,by:12){try Task.checkCancellation();let chunk=Array(unique[offset..<min(offset+12,unique.count)])
+                await withTaskGroup(of:(String,String?).self){group in
+                    for url in chunk { group.addTask{ (url,try? await self.resolve(url)) } }
+                    for await (url,value) in group { if let value{resolved[url]=value} }
+                }
             }
         }
         try Task.checkCancellation()
-        for i in rows.indices {if let url=resolved[rows[i].url]{rows[i].canonicalURL=url;rows[i].activityKey=LinkPolicy.key(url)}}
-        let grouped=Dictionary(grouping:rows,by:\.activityKey)
-        guard grouped.values.allSatisfy({Set($0.map(\.store)).count==1}) else{throw LineDrawError.message("同一活動的店家資料衝突。")}
-        return rows
+        for i in rows.indices {
+            if let url=resolved[rows[i].url] {
+                rows[i].canonicalURL=url
+                rows[i].activityKey=LinkPolicy.key(url)
+            }
+        }
+        return CatalogConflictPolicy.review(rows)
+    }
+}
+public enum CatalogConflictPolicy {
+    public static func review(_ input:[Draw])->[Draw] {
+        let grouped=Dictionary(grouping:input,by:\.activityKey)
+        let conflicts=Set(grouped.filter{Set($0.value.map(\.store)).count>1}.keys)
+        return input.map { row in
+            var row=row
+            if conflicts.contains(row.activityKey) {
+                row.syncIssue="店家資料待確認：不同店家共用同一活動連結。"
+                row.canonicalURL=nil
+            }
+            return row
+        }
     }
 }
 public enum TestCatalog {

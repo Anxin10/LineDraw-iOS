@@ -21,6 +21,26 @@ import FoundationNetworking
         XCTAssertEqual(deadlines.count,2);XCTAssertLessThanOrEqual(deadlines.reduce(0,+),30)
         XCTAssertEqual(events.map(\.timedOut),[true,false]);XCTAssertEqual(events.map(\.operation),["GET source","GET source"])
     }
+    func testForegroundReadRespectsCallerTimeoutOnBothAttempts()async throws {
+        var r=request("GET","wda/activeAppInfo");r.timeoutInterval=3
+        var budgets=[TimeInterval]()
+        _=try await WDARequestExecutor.execute(r,send:{attempt in
+            budgets.append(attempt.timeoutInterval)
+            if budgets.count==1{throw URLError(.timedOut)}
+            return self.response(attempt)
+        })
+        XCTAssertEqual(budgets,[3,3])
+    }
+    func testSharedDeadlineRejectsLateResponseAndDoesNotRetry()async {
+        var now=0.0;var calls=0
+        do {
+            _=try await WDARequestExecutor.execute(request(),context:QueryContext(deadline:2),clock:{now},send:{r in
+                calls+=1;XCTAssertEqual(r.timeoutInterval,2);now=3;return self.response(r)
+            })
+            XCTFail("Late response must be discarded")
+        }catch{XCTAssertEqual(error as? ObservationFailure,.deadlineExceeded)}
+        XCTAssertEqual(calls,1)
+    }
     func testActionTimeoutsNeverReplayTapNavigationOrSessionCreation()async{
         var creation=URLRequest(url:URL(string:"http://127.0.0.1:52000/session")!)
         creation.httpMethod="POST";creation.timeoutInterval=12

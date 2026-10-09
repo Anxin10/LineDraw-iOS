@@ -95,6 +95,7 @@ export class MobileController{
   this.store.data=next;this.store.save();return {ok:true};
  }
  async probe(){if(Date.now()-this.networkAt<5000)return this.networkOK;try{const r=await fetch(WEBSITE,{method:'HEAD',redirect:'error',signal:AbortSignal.timeout(4000)});this.networkOK=r.ok;await r.body?.cancel();}catch{this.networkOK=false;}this.networkAt=Date.now();return this.networkOK;}
+ async getCatalog(){return await this.fetchCatalog();}
  pause(){this.engine?.pause();this.catalogAbort?.abort();}
  stop(){this.engine?.stop();this.catalogAbort?.abort();}
 }

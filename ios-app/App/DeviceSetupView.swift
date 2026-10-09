@@ -9,7 +9,7 @@ struct DeviceSetupView:View {
     @State private var ddiBuild=DDIManager.cachedBuild
     
     var body:some View{List{
-        Section{Label("手機自主模式 · 實驗版",systemImage:"iphone.gen3.radiowaves.left.and.right").font(.headline);Text("iOS 27 可在手機完成配對與準備必要檔案。簽署並安裝 LineDraw 與 DeviceRunner 後，日常只需開啟 VPN、選活動、按開始。").foregroundStyle(.secondary)}
+        Section{Label("手機自主模式 · 實驗版",systemImage:"iphone.gen3.radiowaves.left.and.right").font(.headline);Text("iOS 26 以上可在手機完成配對與準備必要檔案。簽署並安裝 LineDraw 與 DeviceRunner 後，日常只需開啟 VPN、選活動、按開始。").foregroundStyle(.secondary)}
         Section("首次設定"){
             DisclosureGroup("簽署安裝後的準備步驟"){
             Label("開啟 iPhone 開發者模式",systemImage:"1.circle")
@@ -28,8 +28,22 @@ struct DeviceSetupView:View {
         }
         Section("進階與修復"){
             DisclosureGroup("手動匯入與移除"){
-                Button("匯入本機配對檔"){pairingImport=true}.disabled(model.locked).accessibilityIdentifier("importDevicePairing")
+                Button("匯入本機配對檔"){
+                    let doc=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0]
+                    for name in ["device.plist","device.pairing"] {
+                        let file=doc.appendingPathComponent(name)
+                        if let data=try? Data(contentsOf:file), (try? DeviceSecrets.save(data)) != nil {
+                            model.hasDevicePairing=true
+                            model.notice="配對檔已直接匯入並保存！"
+                            try? FileManager.default.removeItem(at:file)
+                            return
+                        }
+                    }
+                    pairingImport=true
+                }.disabled(model.locked).accessibilityIdentifier("importDevicePairing")
+                .fileImporter(isPresented:$pairingImport,allowedContentTypes:[.data,.xml,.propertyList]){result in do{let url=try result.get();let access=url.startAccessingSecurityScopedResource();defer{if access{url.stopAccessingSecurityScopedResource()}};guard (try url.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? 0)<1_000_000 else{throw LineDrawError.message("配對檔過大。")};model.importDevicePairing(try Data(contentsOf:url))}catch{model.error=error.localizedDescription}}
                 Button("手動匯入 DDI"){ddiImport=true}.disabled(model.locked)
+                .fileImporter(isPresented:$ddiImport,allowedContentTypes:[.data],allowsMultipleSelection:true){result in do{try DeviceSecrets.importDDI(result.get());ddiBuild=DDIManager.cachedBuild;model.notice="DDI 檔案已匯入；將在啟動時驗證相容性。"}catch{model.error=error.localizedDescription}}
                 if model.hasDevicePairing{Button("移除本機配對檔",role:.destructive){model.clearDevicePairing()}.disabled(model.locked)}
             }
             Text("重開機後先解鎖、連上 Wi-Fi 並開啟 VPN，再按檢查啟動。配對失效時可直接在手機重新配對；不需要重新匯入電腦檔案。").font(.footnote).foregroundStyle(.secondary)
@@ -53,8 +67,20 @@ struct DeviceSetupView:View {
     }.onChange(of:model.busy){_,busy in if !busy{ddiBuild=DDIManager.cachedBuild}}
         .onChange(of:model.phonePairing.running){_,running in if !running{ddiBuild=DDIManager.cachedBuild}}
         .navigationTitle("手機自主模式").navigationBarTitleDisplayMode(.inline)
-        .fileImporter(isPresented:$pairingImport,allowedContentTypes:[.data,.xml,.propertyList]){result in do{let url=try result.get();let access=url.startAccessingSecurityScopedResource();defer{if access{url.stopAccessingSecurityScopedResource()}};guard (try url.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? 0)<1_000_000 else{throw LineDrawError.message("配對檔過大。")};model.importDevicePairing(try Data(contentsOf:url))}catch{model.error=error.localizedDescription}}
-        .fileImporter(isPresented:$ddiImport,allowedContentTypes:[.data],allowsMultipleSelection:true){result in do{try DeviceSecrets.importDDI(result.get());ddiBuild=DDIManager.cachedBuild;model.notice="DDI 檔案已匯入；將在啟動時驗證相容性。"}catch{model.error=error.localizedDescription}}
+        .onAppear {
+            if !model.hasDevicePairing {
+                let doc=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0]
+                for name in ["device.plist","device.pairing"] {
+                    let file=doc.appendingPathComponent(name)
+                    if let data=try? Data(contentsOf:file), (try? DeviceSecrets.save(data)) != nil {
+                        model.hasDevicePairing=true
+                        model.notice="已自動載入本機配對檔！"
+                        try? FileManager.default.removeItem(at:file)
+                        break
+                    }
+                }
+            }
+        }
     }
 }
 

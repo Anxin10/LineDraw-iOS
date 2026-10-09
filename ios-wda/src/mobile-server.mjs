@@ -35,6 +35,7 @@ export class MobileServer{
    }
    let pair;try{pair=this.gate.authorize(req.headers.authorization);}catch{return send(401,{error:'尚未配對或配對已失效，請重新配對。'});}
    if(req.method==='GET'&&url.pathname==='/v1/status')return send(200,this.controller.view(pair,Object.fromEntries(url.searchParams)));
+   if(req.method==='GET'&&url.pathname==='/v1/catalog')return send(200,await this.controller.getCatalog());
    if(req.method!=='POST'||!req.headers['content-type']?.startsWith('application/json'))return send(404,{error:'找不到此功能。'});
    const b=await this.body(req);
    if(url.pathname==='/v1/start')return send(200,this.controller.start(pair,b));

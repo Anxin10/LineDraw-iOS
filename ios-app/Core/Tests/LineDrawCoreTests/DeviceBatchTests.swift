@@ -9,6 +9,20 @@ final class DeviceScreenTests:XCTestCase {
     func testBottomOnlyAndCombinedFriend(){var s=screen(["加入好友並參加抽獎"]);guard case .click("ADD_FRIEND_AND_SUBMIT",_)=DeviceScreenRules.classify(s) else{return XCTFail()};guard case .pause=DeviceScreenRules.classify(s,autoFriend:false) else{return XCTFail()};s.nodes[1].rect.y=100;XCTAssertEqual(DeviceScreenRules.classify(s),.wait)}
     func testMultipleTargetsAndForeignAppPause(){guard case .pause=DeviceScreenRules.classify(screen(["抽選","參加抽選"])) else{return XCTFail()};var s=screen(["抽選"]);s.bundle="other";guard case .pause=DeviceScreenRules.classify(s) else{return XCTFail()}}
     func testAlertBlocksEvenKnownTerminal(){var s=screen(["已結束"]);s.nodes.append(.init(type:"XCUIElementTypeAlert",labels:[],rect:.init(x:20,y:200,width:100,height:100)));guard case .pause=DeviceScreenRules.classify(s) else{return XCTFail()}}
+    func testDesktopLoginInRedemptionInstructionsDoesNotBlockDraw(){
+        var s=screen(["參加抽獎"])
+        s.nodes.append(.init(type:"XCUIElementTypeStaticText",labels:["購買時需持中獎之LINE優惠券審核購買，不得以「截圖、錄影、視訊畫面、遠端控制、電腦版登入」進行兌換購買"],rect:.init(x:10,y:300,width:380,height:100)))
+        guard case .click("SUBMIT",_)=DeviceScreenRules.classify(s) else{return XCTFail("Redemption prose blocked the draw")}
+        s.nodes.append(.init(type:"XCUIElementTypeStaticText",labels:["請先登入 LINE"],rect:.init(x:10,y:420,width:380,height:30)))
+        guard case .pause=DeviceScreenRules.classify(s) else{return XCTFail("Real login prompt must still block")}
+    }
+    func testDesktopLoginControlAndCaptchaStillBlock(){
+        for label in ["電腦版登入","請輸入驗證碼","同意條款","付款"] {
+            var s=screen(["參加抽獎"])
+            s.nodes.append(.init(type:"XCUIElementTypeButton",labels:[label],rect:.init(x:10,y:300,width:380,height:40)))
+            guard case .pause=DeviceScreenRules.classify(s) else{return XCTFail(label)}
+        }
+    }
     func testXMLSecurityAndObservedWebWrapper()throws{
         XCTAssertThrowsError(try DeviceScreenRules.parse("<!DOCTYPE a [<!ENTITY x SYSTEM 'file:///secret'>]><a>&x;</a>"))
         let xml="""
@@ -20,6 +34,17 @@ final class DeviceScreenTests:XCTestCase {
 }
 
 @MainActor final class DeviceBatchTests:XCTestCase {
+    func testTwoDotLossAdvancesToNextCouponWithoutTapping() async {
+        let d=Driver()
+        d.snapshots=[DeviceScreenTests().screen(["可惜..沒有抽中！"],enabled:false),DeviceScreenTests().screen(["已結束"],enabled:false)]
+        let rows=[row(0),row(1)],e=engine(d)
+        await e.run(rows,allInitial:rows,filter:CatalogFilter(),autoFriend:true,autoContinue:false)
+        XCTAssertEqual(d.opens,rows.map{$0.canonicalURL!})
+        XCTAssertEqual(d.taps,0)
+        XCTAssertEqual(rows.map{records[$0.activityKey]?.status},["COMPLETE","ENDED"])
+        XCTAssertEqual(e.progress.state,"COMPLETED")
+        XCTAssertLessThan(time,5)
+    }
     func testSuccessfulObservationsAdvanceWhileFirstPageIsLoading(){
         var work=DeviceWorkProgress(),p=DeviceBatchProgress();p.total=5;p.itemStep=1;work.update(p)
         let before=work.completed
@@ -34,7 +59,7 @@ final class DeviceScreenTests:XCTestCase {
     }
     final class Driver:DeviceDriver {
         var snapshots=[DeviceScreen]();var opens=[String]();var taps=0;var network=true;var tapError:Error?;var onTap:(()->Void)?;var current=0;var sequence=[DeviceScreen]();var baseline="navigation-boundary"
-        var onSnapshot:(()->Void)?
+        var onSnapshot:(()->Void)?;var snapshotError:Error?
         var useDirectNavigation=false;var navigation:DeviceNavigationGuard?;var now:()->TimeInterval={0};var events=[String]()
         func open(_ url:String)async throws->String{
             events.append("open");opens.append(url);current=min(opens.count-1,max(snapshots.count-1,0))
@@ -43,6 +68,7 @@ final class DeviceScreenTests:XCTestCase {
         }
         func snapshot()async throws->DeviceScreen{
             events.append("read");onSnapshot?()
+            if let snapshotError{throw snapshotError}
             var screen = !sequence.isEmpty ? sequence.removeFirst():snapshots[min(current,snapshots.count-1)]
             if var navigation{let ready=navigation.observe(screen,at:now());self.navigation=navigation;screen.navigationVerified=ready;screen.navigationPending = !ready}
             return screen
@@ -54,6 +80,23 @@ final class DeviceScreenTests:XCTestCase {
     func row(_ index:Int)->Draw{var r=TestCatalog.five()[index];r.startsAt=Date().addingTimeInterval(-3600);r.endsAt=Date().addingTimeInterval(3600);return r}
     func engine(_ d:Driver,fetch:(()async throws->[Draw])?=nil,write:((Draw,ParticipationRecord?)throws->Void)?=nil)->DeviceBatch{
         DeviceBatch(driver:d,read:{self.records[$0]},write:write ?? {self.records[$0.activityKey]=$1},update:{_ in},fetch:fetch,clock:{self.time},sleep:{self.time+=$0;await Task.yield()})
+    }
+    func testObservationTraceSeparatesPendingFromAcceptedTap()async throws{
+        let d=Driver();d.useDirectNavigation=true;d.now={self.time}
+        let ready=DeviceScreenTests().screen(["參加抽獎"])
+        d.sequence=[DeviceScreenTests().screen([]),ready];d.snapshots=[ready]
+        let e=engine(d);await e.run([row(0)],allInitial:[row(0)],filter:CatalogFilter(),autoFriend:true,autoContinue:false)
+        XCTAssertEqual(d.taps,1)
+        XCTAssertTrue(e.observations.contains{$0.reason=="navigationPending" && $0.decision=="wait"})
+        XCTAssertTrue(e.observations.contains{$0.reason=="tapCandidateAccepted" && $0.targetRect != nil})
+        XCTAssertEqual(e.observations.map(\.read),Array(1...e.observations.count))
+        XCTAssertNoThrow(try JSONDecoder().decode([DeviceObservation].self,from:JSONEncoder().encode(e.observations)))
+    }
+    func testFailedQueryIsRecordedWithoutTap()async{
+        let d=Driver();d.snapshotError=DeviceDriverError.disconnected
+        let e=engine(d);await e.run([row(0)],allInitial:[row(0)],filter:CatalogFilter(),autoFriend:true,autoContinue:false)
+        XCTAssertEqual(d.taps,0);XCTAssertEqual(e.progress.state,"STOPPED")
+        XCTAssertEqual(e.observations.map(\.reason),["queryFailed"])
     }
     func testOldCouponWhileNewPageLoadsCannotBeMarkedComplete()async{
         let d=Driver(),old=DeviceScreenTests().screen(["恭喜中獎"]),ready=DeviceScreenTests().screen(["抽選"])
@@ -174,22 +217,22 @@ final class DeviceScreenTests:XCTestCase {
         await e.run([row(0),row(1)],allInitial:[row(0),row(1)],filter:CatalogFilter(),autoFriend:true,autoContinue:false)
         XCTAssertEqual(d.taps,1);XCTAssertEqual(records[row(0).activityKey]?.status,"SUBMITTED");XCTAssertEqual(e.progress.state,"STOPPED")
     }
-    func testSlowLoadingReopensOnceAndMovesOn()async{
+    func testSlowLoadingUsesSingleItemBudgetAndMovesOn()async{
         let d=Driver();d.snapshots=[DeviceScreenTests().screen([])];let e=engine(d)
         await e.run([row(0)],allInitial:[row(0)],filter:CatalogFilter(),autoFriend:true,autoContinue:false)
-        XCTAssertEqual(d.opens.count,2);XCTAssertEqual(d.taps,0);XCTAssertEqual(records[row(0).activityKey]?.status,"LOAD_TIMEOUT")
+        XCTAssertEqual(d.opens.count,1);XCTAssertEqual(d.taps,0);XCTAssertEqual(records[row(0).activityKey]?.status,"LOAD_TIMEOUT")
     }
     func testNetworkWaitBoundedAndDoesNotOpenCoupon()async{
         let d=Driver();d.network=false;let e=engine(d)
         await e.run([row(0)],allInitial:[row(0)],filter:CatalogFilter(),autoFriend:true,autoContinue:false)
-        XCTAssertEqual(d.opens.count,0);XCTAssertGreaterThanOrEqual(time,60);XCTAssertLessThan(time,62)
+        XCTAssertEqual(d.opens.count,0);XCTAssertGreaterThanOrEqual(time,30);XCTAssertLessThan(time,32)
     }
     func testLateSecondSnapshotCannotAuthorizeTapBeyondLoadWindow()async{
         let d=Driver();d.snapshots=[DeviceScreenTests().screen(["抽選"])];var reads=0
         d.onSnapshot={reads+=1;if reads.isMultiple(of:2){self.time+=31}}
         let e=engine(d)
         await e.run([row(0)],allInitial:[row(0)],filter:CatalogFilter(),autoFriend:true,autoContinue:false)
-        XCTAssertEqual(d.opens.count,2);XCTAssertEqual(d.taps,0)
+        XCTAssertEqual(d.opens.count,1);XCTAssertEqual(d.taps,0)
         XCTAssertEqual(records[row(0).activityKey]?.status,"LOAD_TIMEOUT")
     }
     func testAppendOnlyUnseenSelectedFilterAndNeverUnselectedOriginal()async{

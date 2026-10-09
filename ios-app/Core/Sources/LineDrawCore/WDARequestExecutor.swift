@@ -17,9 +17,12 @@ public struct WDARequestAttempt:Sendable {
     public static func operation(_ request:URLRequest)->String {
         let parts=request.url?.path.split(separator:"/") ?? []
         let suffix=parts.first=="session" ? (parts.count>2 ? parts.dropFirst(2).joined(separator:"/"):"session"):parts.joined(separator:"/")
-        return (request.httpMethod ?? "GET")+" "+suffix
+        let format=URLComponents(url:request.url ?? URL(string:"http://localhost")!,resolvingAgainstBaseURL:false)?.queryItems?.first{$0.name=="format"}?.value
+        return (request.httpMethod ?? "GET")+" "+suffix+(suffix=="source" && format=="json" ? ".json":"")
     }
     public static func execute(_ request:URLRequest,
+        context:QueryContext?=nil,
+        clock:()->TimeInterval={ProcessInfo.processInfo.systemUptime},
         send:(URLRequest)async throws->(Data,URLResponse),
         onAttempt:(WDARequestAttempt)->Void={_ in}
     )async throws->(Data,URLResponse) {
@@ -28,10 +31,10 @@ public struct WDARequestAttempt:Sendable {
         let screenRead=method=="GET" && parts.count==3 && parts[0]=="session" && parts[2]=="source"
         let appRead=method=="GET" && parts.count==4 && parts[0]=="session" && parts[2]=="wda" && parts[3]=="activeAppInfo"
         // The combined screen-read budget stays close to the queue's 30-second load window.
-        let deadlines: [TimeInterval]=screenRead ? [18,12]:appRead ? [12,8]:[request.timeoutInterval]
+        let deadlines: [TimeInterval]=context != nil ? [request.timeoutInterval] : screenRead ? [18,12]:appRead ? [min(request.timeoutInterval,12),min(request.timeoutInterval,8)]:[request.timeoutInterval]
         for (index,timeout) in deadlines.enumerated() {
             try Task.checkCancellation()
-            var attempt=request;attempt.timeoutInterval=timeout
+            var attempt=request;attempt.timeoutInterval=try context?.timeout(cap:timeout,now:clock()) ?? timeout
             let began=ProcessInfo.processInfo.systemUptime
             let result:(Data,URLResponse)
             do {
@@ -49,7 +52,7 @@ public struct WDARequestAttempt:Sendable {
                 throw error
             }
             onAttempt(.init(operation:operation(request),attempt:index+1,seconds:ProcessInfo.processInfo.systemUptime-began,errorCode:nil,timedOut:false))
-            try Task.checkCancellation();return result
+            try Task.checkCancellation();if let context{_=try context.timeout(cap:1,now:clock())};return result
         }
         preconditionFailure("At least one request attempt is required")
     }

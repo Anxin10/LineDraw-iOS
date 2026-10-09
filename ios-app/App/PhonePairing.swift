@@ -9,7 +9,7 @@ import LineDrawDeviceBridge
 
 /// Short-lived, user-initiated pairing. No external host or USB pairing command.
 @MainActor final class PhonePairing:NSObject,ObservableObject,@preconcurrency NetServiceDelegate {
-    static let taskID="com.beybladehunter.linedraw.ios.phonePairing"
+    static let taskID="com.lanxinan.linedraw.ios.phonePairing"
     @Published private(set) var running=false
     @Published private(set) var message="尚未開始手機配對"
     @Published private(set) var pin:String?
@@ -53,7 +53,11 @@ import LineDrawDeviceBridge
             do {
                 let request=BGContinuedProcessingTaskRequest(identifier:Self.taskID,title:"LineDraw 手機配對",subtitle:"等待系統配對")
                 request.strategy = .fail
-                try await BGTaskScheduler.shared.submitTaskRequest(request)
+                if #available(iOS 27.0, *) {
+                    try await BGTaskScheduler.shared.submitTaskRequest(request)
+                } else {
+                    try BGTaskScheduler.shared.submit(request)
+                }
                 let bgDeadline=Date().addingTimeInterval(10)
                 while background==nil {
                     try Task.checkCancellation()

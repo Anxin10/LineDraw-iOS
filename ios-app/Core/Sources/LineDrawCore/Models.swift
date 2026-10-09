@@ -8,6 +8,7 @@ public enum Eligibility: String, Codable, Sendable { case ready, notStarted, exp
     public var title: String { switch self { case .ready: "可抽選"; case .notStarted: "尚未開始"; case .expired: "已截止"; case .unknown: "時間未確認"; case .archived: "已封存" } }
 }
 public struct Draw: Codable, Identifiable, Hashable, Sendable {
+    public var syncIssue:String? = nil
     public var id: String; public var activityKey: String; public var store: String; public var city: String
     public var product: String; public var url: String; public var canonicalURL: String?; public var timeLabel: String
     public var startsAt: Date?; public var endsAt: Date?; public var ordinal: Int; public var archived: Bool; public var area: DrawArea
@@ -18,7 +19,7 @@ public struct Draw: Codable, Identifiable, Hashable, Sendable {
         if archived { return .archived }; if let start=startsAt, now < start { return .notStarted }; if let end=endsAt, now >= end { return .expired }
         return startsAt == nil || endsAt == nil ? .unknown : .ready
     }
-    public func runnable(at now: Date = Date()) -> Bool { eligibility(at: now) == .ready && canonicalURL != nil }
+    public func runnable(at now: Date = Date()) -> Bool { syncIssue == nil && eligibility(at: now) == .ready && canonicalURL != nil }
 }
 public enum DrawStatusFilter: String, Codable, CaseIterable, Identifiable, Sendable {
     case ready, notStarted, unknown, recorded, expired, archived
@@ -46,14 +47,20 @@ public struct ParticipationRecord: Codable, Identifiable, Equatable, Sendable {
     public var canMarkManually: Bool { ["SUBMITTED","REVIEW","LOAD_TIMEOUT","ENDED","SKIPPED"].contains(status) }
 }
 public struct AppSettings: Codable, Sendable {
+    public var scanLookupMode:String?
+    public var batchLookupMode:String?
     public var profile = "預設"; public var profiles = ["預設"]; public var autoFriend = true; public var autoContinue = true
     public var appearance = "system"; public var reduceTransparency = false; public var reduceMotion = false
     public init() {}
 }
-public struct Diagnostic: Codable, Identifiable, Sendable { public var id = UUID(); public var at = Date(); public var code: String; public var message: String }
+public struct Diagnostic: Codable, Identifiable, Sendable {
+    public var id = UUID(); public var at = Date(); public var code: String; public var message: String
+    public init(at:Date=Date(),code:String,message:String){self.at=at;self.code=code;self.message=message}
+}
 public struct ManualUndo: Codable, Sendable { public var previous: ParticipationRecord? }
 public struct DatabaseSnapshot: Codable, Sendable {
     public var version=1; public var draws: [Draw]=[]; public var records: [String:ParticipationRecord]=[:]; public var manualUndo: [String:ManualUndo]=[:]
+    public var selectedCatalog:CatalogSource?; public var catalogSync:[String:CatalogSync]?
     public var settings=AppSettings(); public var consentVersion=0; public var lastSync: Date?; public var syncSummary="尚未同步"; public var diagnostics: [Diagnostic]=[]
     public var bridgeOutbox: [RecordMutation]=[]
     public init() {}
