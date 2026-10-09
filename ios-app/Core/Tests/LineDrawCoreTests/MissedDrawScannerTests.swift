@@ -39,6 +39,9 @@ import XCTest
         let scanner=MissedDrawScanner(driver:driver,clock:{driver.time},sleep:{driver.time+=$0},update:{_,_,finding in if let finding{findings.append(finding)}})
         try await scanner.run([row(0)])
         XCTAssertEqual(findings.first?.status,"ENDED");XCTAssertEqual(findings.first?.reads,2);XCTAssertEqual(driver.taps,0)
+        XCTAssertEqual(findings.first?.observations?.map(\.reason),["navigationPending","classify"])
+        XCTAssertEqual(findings.first?.observations?.last?.decision,"terminal:ENDED")
+        XCTAssertNil(findings.first?.reason)
     }
     func testTimeoutIsUnknownAndIncludesFailedReadTime()async throws{
         let driver=Driver();driver.fail=true
@@ -47,6 +50,25 @@ import XCTest
         try await scanner.run([row(0)])
         XCTAssertEqual(findings.first?.status,"UNKNOWN");XCTAssertEqual(findings.first?.reads,1)
         XCTAssertEqual(findings.first!.querySeconds,0.7,accuracy:0.0001);XCTAssertEqual(driver.taps,0)
+        XCTAssertNotNil(findings.first?.reason)
+        XCTAssertEqual(findings.first?.observations?.count,0)
+    }
+    func testScanTraceExplainsLoadedPageWaitingWithoutSavingPageText()async throws{
+        let driver=Driver();driver.screens=[screen("private unrelated body"),screen("已結束")]
+        var findings=[MissedDrawFinding]()
+        let scanner=MissedDrawScanner(driver:driver,clock:{driver.time},sleep:{driver.time+=$0},update:{_,_,finding in if let finding{findings.append(finding)}})
+        try await scanner.run([row(0)])
+        let traces=try XCTUnwrap(findings.first?.observations)
+        XCTAssertEqual(traces.map(\.decision),["wait","terminal:ENDED"])
+        XCTAssertEqual(traces.map(\.read),[1,2])
+        XCTAssertEqual(traces.first!.querySeconds,0.7,accuracy:0.0001)
+        let json=try JSONEncoder().encode(traces)
+        XCTAssertFalse(String(decoding:json,as:UTF8.self).contains("private unrelated body"))
+        XCTAssertEqual(driver.taps,0)
+        // Previously saved findings without the new optional field still decode.
+        var legacy=try XCTUnwrap(JSONSerialization.jsonObject(with:JSONEncoder().encode(findings[0])) as? [String:Any])
+        legacy.removeValue(forKey:"observations")
+        XCTAssertNil(try JSONDecoder().decode(MissedDrawFinding.self,from:JSONSerialization.data(withJSONObject:legacy)).observations)
     }
     func testIdentityRequiresBothExpectedSKUAndStoreAndRejectsAnotherDocument(){
         var draw=row(0);draw.product="CX-01 測試商品";draw.store="Funbox 台中中友店"

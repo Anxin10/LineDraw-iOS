@@ -334,7 +334,7 @@ import LineDrawCore
             let started=ProcessInfo.processInfo.systemUptime
             @MainActor func report(_ status:String){
                 guard ProcessInfo.processInfo.arguments.contains("--missed-scan") else{return}
-                let body:[String:Any]=["catalog":catalogSource.rawValue,"candidateKeys":rows.map(\.activityKey),"status":status,"summary":missedScanSummary,"index":missedScanIndex,"total":missedScanTotal,"elapsed":ProcessInfo.processInfo.systemUptime-started,"items":missedFindings.map{["activityKey":$0.activityKey,"product":$0.product,"store":$0.store,"status":$0.status,"totalSeconds":$0.totalSeconds,"openSeconds":$0.openSeconds,"querySeconds":$0.querySeconds,"decisionSeconds":$0.decisionSeconds,"reads":$0.reads] as [String:Any]},"requests":runtime.driver?.timings ?? [:],"phases":runtime.driver?.phaseTimings ?? [:]]
+                let body:[String:Any]=["catalog":catalogSource.rawValue,"candidateKeys":rows.map(\.activityKey),"status":status,"summary":missedScanSummary,"index":missedScanIndex,"total":missedScanTotal,"elapsed":ProcessInfo.processInfo.systemUptime-started,"items":(try? JSONSerialization.jsonObject(with:JSONEncoder().encode(missedFindings))) ?? [],"requests":runtime.driver?.timings ?? [:],"phases":runtime.driver?.phaseTimings ?? [:]]
                 let file=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("missed-scan.json")
                 if let bytes=try? JSONSerialization.data(withJSONObject:body,options:[.prettyPrinted,.sortedKeys]){try? bytes.write(to:file,options:.atomic)}
             }
@@ -373,8 +373,14 @@ import LineDrawCore
             report(completed ? "completed":"stopped")
             #endif
             await runtime.stop(success:completed)
+            // Latest bounded scan evidence stays on this phone; no screenshots or page text.
+            let scanFile=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("missed-scan-observations.json")
+            if let evidence=try? JSONEncoder().encode(Array(missedFindings.suffix(20))){try? evidence.write(to:scanFile,options:[.atomic,.completeFileProtection])}
             try? db?.log("MISSED_DRAW_SCAN",missedScanSummary)
-            let diagnostics=missedFindings.suffix(20).map{finding in Diagnostic(code:"MISSED_DRAW_TIMING",message:"\(finding.product) \(finding.status)；總計 \(String(format:"%.3f",finding.totalSeconds)) 秒；開頁 \(String(format:"%.3f",finding.openSeconds))；查詢 \(finding.reads) 次/\(String(format:"%.3f",finding.querySeconds)) 秒；判斷 \(String(format:"%.6f",finding.decisionSeconds)) 秒。")}
+            let diagnostics=missedFindings.suffix(20).map{finding -> Diagnostic in
+                let counts=Dictionary(grouping:finding.observations ?? [],by:{$0.reason+"/"+$0.navigationReason}).mapValues{$0.count}
+                let phases=counts.keys.sorted().map{"\($0)=\(counts[$0]!)"}.joined(separator:",")
+                return Diagnostic(code:"MISSED_DRAW_TIMING",message:"\(finding.product) \(finding.status)；總計 \(String(format:"%.3f",finding.totalSeconds)) 秒；開頁 \(String(format:"%.3f",finding.openSeconds))；查詢 \(finding.reads) 次/\(String(format:"%.3f",finding.querySeconds)) 秒；判斷 \(String(format:"%.6f",finding.decisionSeconds)) 秒；階段 [\(phases)]；原因：\(finding.reason ?? "已確認")。")}
             try? db?.logMany(diagnostics)
             if let db{data=db.snapshot}
             busy=false;missedScanRunning=false;deviceTask=nil
