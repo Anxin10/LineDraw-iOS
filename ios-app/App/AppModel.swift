@@ -499,7 +499,9 @@ import LineDrawCore
             let began=Date();var queueSeconds:Double=0;var startupSeconds:Double=0;var phase="preparingFixture"
             var stages=[String]();var records=[String:ParticipationRecord]();var measuredBatch:DeviceBatch?
             let args=ProcessInfo.processInfo.arguments
-            let fixtureCount=min(30,max(1,args.first{$0.hasPrefix("--fixture-limit=")}.flatMap{Int($0.dropFirst("--fixture-limit=".count))} ?? 5))
+            // Long-batch probe uses the same guarded dispatch and atomic database
+            // copy; it never submits a real coupon or edits participation records.
+            let fixtureCount=min(200,max(1,args.first{$0.hasPrefix("--fixture-limit=")}.flatMap{Int($0.dropFirst("--fixture-limit=".count))} ?? 5))
             let durable=args.contains("--fixture-durable")
             let probeFile=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("speed-state.json")
             defer{try? FileManager.default.removeItem(at:probeFile.deletingLastPathComponent())}
