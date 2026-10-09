@@ -199,6 +199,7 @@ import LineDrawCore
         if ProcessInfo.processInfo.arguments.contains("--scan-json"){mode="json"}
         if ProcessInfo.processInfo.arguments.contains("--scan-compact"){mode="compact"}
         #endif
+        if mode=="ax"{mode="compact"}
         if mode=="compact",!compactScanAvailable{mode="xml"}
         do {
             if mode=="compact",compactScanAvailable {
@@ -221,7 +222,7 @@ import LineDrawCore
             case .click,.terminal:
                 screen.navigationVerified=true;screen.navigationPending=false
                 navigationCounts["scan:identity",default:0]+=1
-                lookupMode="scan:"+mode+"-identity"
+                lookupMode="scan:"+mode+(mode=="compact" ? ":"+lastNativeSnapshotMode:"")+"-identity"
                 return screen
             default:break
             }
@@ -231,10 +232,12 @@ import LineDrawCore
             screen.navigationPending = !screen.navigationVerified
             navigationGuard=navigation
         }
-        lookupMode="scan:"+(mode=="compact" && !compactScanAvailable ? "xml-fallback":mode)
+        lookupMode="scan:"+(mode=="compact" && !compactScanAvailable ? "xml-fallback":mode+(mode=="compact" ? ":"+lastNativeSnapshotMode:""))
         return screen
     }
     private var tapForegroundGuardAvailable=false
+    private var directAXUnavailable=false
+    private var lastNativeSnapshotMode="standard"
     #if DEBUG
     func verifyTapGuardRejection()async throws->Bool{
         guard tapForegroundGuardAvailable else{return false}
@@ -249,21 +252,29 @@ import LineDrawCore
         let began=ProcessInfo.processInfo.systemUptime
         defer{measuredPhase("capture.compact",began)}
         var query=[URLQueryItem(name:"expected_bundle",value:expectedBundle)]
+        var directAX=(batchLookupMode=="ax" || scanLookupMode=="ax") && !directAXUnavailable
         #if DEBUG
-        let directAX=ProcessInfo.processInfo.arguments.contains("--snapshot-ax")
-        if directAX{query.append(URLQueryItem(name:"snapshot_mode",value:"ax"))}
+        if ProcessInfo.processInfo.arguments.contains("--snapshot-ax"){directAX=true}
+        let legacyFixture=expectedBundle=="com.apple.mobilesafari" && fixtureBaseURL != nil && ProcessInfo.processInfo.arguments.contains("--fixture-legacy-runner")
+        if legacyFixture{directAX=false}
         #endif
+        if directAX{query.append(URLQueryItem(name:"snapshot_mode",value:"ax"))}
         if decisionOnly {
             let filter=["labels":DeviceScreenRules.observationLabels.map(DeviceScreenRules.normalize),"blockers":DeviceScreenRules.blockers.map{DeviceScreenRules.normalize($0).lowercased()}]
             let bytes=try JSONSerialization.data(withJSONObject:filter)
             query.append(URLQueryItem(name:"decision_filter",value:String(decoding:bytes,as:UTF8.self)))
         }
         let value=try await request("GET",route("linedraw/observe"),query:query)
-        guard let envelope=value as? [String:Any],envelope["schema"] as? Int==1,let bundle=envelope["bundleId"] as? String else{throw ObservationFailure.invalidXML}
+        guard var envelope=value as? [String:Any],envelope["schema"] as? Int==1,let bundle=envelope["bundleId"] as? String else{throw ObservationFailure.invalidXML}
         #if DEBUG
-        if directAX,envelope["ready"] as? Bool==true,envelope["snapshotMode"] as? String != "ax"{throw ObservationFailure.invalidXML}
-        tapForegroundGuardAvailable=envelope["tapForegroundGuard"] as? Int==1
+        if legacyFixture{envelope.removeValue(forKey:"snapshotMode");envelope.removeValue(forKey:"tapForegroundGuard")}
+        if ProcessInfo.processInfo.arguments.contains("--snapshot-ax"),envelope["ready"] as? Bool==true,envelope["snapshotMode"] as? String != "ax"{throw ObservationFailure.invalidXML}
         #endif
+        tapForegroundGuardAvailable=envelope["tapForegroundGuard"] as? Int==1
+        if envelope["ready"] as? Bool==true {
+            lastNativeSnapshotMode=envelope["snapshotMode"] as? String ?? "standard"
+            if (batchLookupMode=="ax" || scanLookupMode=="ax"),!directAXUnavailable,lastNativeSnapshotMode != "ax"{directAXUnavailable=true;navigationCounts["axUnsupportedFallback",default:0]+=1}
+        }
         foregroundBundles[bundle,default:0]+=1
         guard bundle==expectedBundle,envelope["ready"] as? Bool==true else{return DeviceScreen(bundle:bundle,width:dims.width,height:dims.height,nodes:[])}
         guard let tree=envelope["tree"] as? [String:Any] else{throw ObservationFailure.invalidXML}
@@ -328,13 +339,13 @@ import LineDrawCore
     func snapshot()async throws->DeviceScreen{
         // Observe the new page with a bounded targeted lookup first.
         var screen:DeviceScreen
-        var useCompact=batchLookupMode=="compact"
+        var useCompact=batchLookupMode=="compact" || batchLookupMode=="ax"
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--batch-compact"){useCompact=true}
         #endif
         // Keep normal navigation proof; SKU/store never authorize a batch tap.
         if useCompact,compactScanAvailable {
-            do {screen=try await compactCapture(decisionOnly:true);lookupMode="batch:compact"}
+            do {screen=try await compactCapture(decisionOnly:true);lookupMode="batch:compact:"+lastNativeSnapshotMode}
             catch let error as WDAResponseFailure where error.status==404 && error.code != "invalid session id" {
                 compactScanAvailable=false
                 screen=try await capture(allowOCR:true,preferTargeted:true)
@@ -618,9 +629,9 @@ import LineDrawCore
         let matches=screen.nodes.filter{$0.type==target.type && $0.enabled && $0.rect.near(target.rect) && $0.labels.contains(where:{target.labels.contains($0)})}
         guard matches.count==1,canAct() else{throw DeviceDriverError.notDispatched}
         // Revalidated exact target; never blind fixed coordinates or coupon redemption.
-        var serverGuard=false
+        var serverGuard=batchLookupMode=="ax" && tapForegroundGuardAvailable
         #if DEBUG
-        serverGuard=ProcessInfo.processInfo.arguments.contains("--tap-foreground-guard") && tapForegroundGuardAvailable
+        if ProcessInfo.processInfo.arguments.contains("--tap-foreground-guard"){serverGuard=tapForegroundGuardAvailable}
         #endif
         if !serverGuard {
             let foregroundBegan=ProcessInfo.processInfo.systemUptime

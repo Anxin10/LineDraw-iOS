@@ -33,10 +33,11 @@ struct SettingsView:View{
         Section{Toggle("自動加入店家好友",isOn:setting(\.autoFriend)).disabled(model.locked);Toggle("接續網站新增活動",isOn:setting(\.autoContinue)).disabled(model.locked)
         }header:{Text("抽選輔助")}footer:{Text("本輪結束後同步，沿用開始時的篩選接續新增活動，最多額外 3 輪；未選項目、已有紀錄與本輪失敗項目不會自動重排。載入 30 秒後重開一次，斷網最多等 60 秒。")}
         Section{Picker("抽選畫面查詢",selection:Binding(get:{model.data.settings.batchLookupMode ?? "standard"},set:{value in model.settings{$0.batchLookupMode=value}})){
-            Text("精簡決策查詢").tag("compact");Text("相容查詢").tag("standard")
+            Text("直接 AX（實驗）").tag("ax");Text("精簡決策查詢").tag("compact");Text("相容查詢").tag("standard")
         }.disabled(model.locked)
-        }header:{Text("手機抽選查詢")}footer:{Text("精簡模式只讀取抽選決策需要的文字，保留換頁驗證與防重送。需要新版 DeviceRunner；舊版缺少端點時回退相容查詢。速度仍受 LINE 載入影響。")}
+        }header:{Text("手機抽選查詢")}footer:{Text("直接 AX 為實驗選項，需要新版 DeviceRunner；不支援時使用既有查詢。保留換頁驗證、點擊前核對與防重送。實測改善查詢等待，尚未保證真實抽選每筆 3 秒。")}
         Section{Picker("漏抽掃描查詢",selection:Binding(get:{model.data.settings.scanLookupMode ?? "xml"},set:{value in model.settings{$0.scanLookupMode=value}})){
+            Text("直接 AX（實驗）").tag("ax")
             Text("精簡查詢（新版 Runner）").tag("compact")
             Text("原生 JSON").tag("json")
             Text("XML 相容模式").tag("xml")
@@ -51,6 +52,11 @@ struct SettingsView:View{
         }header:{Text("測試與示範")}footer:{Text("實機測試會操作 LINE；離線示範不會。兩者的清單與紀錄均與網站分開。測試活動過期後可匯入新的 JSON 清單。")}
         Section{NavigationLink{DiagnosticsView()}label:{Label("診斷紀錄",systemImage:"stethoscope")};NavigationLink{DeclarationView()}label:{Label("使用說明",systemImage:"doc.text")};NavigationLink{LicenseView()}label:{Label("授權與第三方元件",systemImage:"curlybraces")};Link(destination:CatalogParser.sourceURL){Label("查看來源網站",systemImage:"globe")}}
         Section{NavigationLink("版本修正紀錄"){List{
+            Section("1.1.11（34） · 2026/10/09"){
+                Text("新增直接 AX 實驗查詢選項，支援新版 Runner 點擊前前景核對，保留換頁確認與防重送。")
+                Text("修正「抽獎期間已結束」辨識，避免等待到載入逾時；查詢預算不足時不再送出新請求。")
+                Text("改善重複時間戳編碼成本。20 筆本機耐久測試通過；真實抽選每筆 3 秒仍待更多活動驗證。")
+            }
             Section("1.1.10（33） · 2026/10/09"){
                 Text("配對成功但必要檔案準備中斷時，顯示配對已保存，無需重複輸入 PIN。")
             }

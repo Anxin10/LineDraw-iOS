@@ -54,6 +54,9 @@ import LineDrawCore
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--enable-compact-batch") {
                 try database.update{$0.settings.batchLookupMode="compact"}
             }
+            if !isUITest,ProcessInfo.processInfo.arguments.contains("--enable-ax-batch") {
+                try database.update{$0.settings.batchLookupMode="ax"}
+            }
             #endif
             db=database;data=database.snapshot
             if !isUITest{deviceMode=UserDefaults.standard.string(forKey:"executionMode") != "mac";hasDevicePairing=(try? DeviceSecrets.load()) != nil}
@@ -66,7 +69,12 @@ import LineDrawCore
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--device-check"){Task{try? await Task.sleep(for:.seconds(2));self.checkDeviceConnection()}}
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--inspect-line"){Task{try? await Task.sleep(for:.seconds(2));self.inspectCurrentLINE()}}
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--device-speed"){Task{try? await Task.sleep(for:.seconds(2));self.runDeviceSpeedProbe()}}
-            if !isUITest,ProcessInfo.processInfo.arguments.contains("--missed-scan"){Task{try? await Task.sleep(for:.seconds(2));self.chooseArea(.website);self.startMissedScan(limit:5)}}
+            if !isUITest,ProcessInfo.processInfo.arguments.contains("--missed-scan"){Task{
+                try? await Task.sleep(for:.seconds(2));self.chooseArea(.website)
+                let args=ProcessInfo.processInfo.arguments
+                let count=args.first{$0.hasPrefix("--scan-limit=")}.flatMap{Int($0.dropFirst("--scan-limit=".count))} ?? 5
+                self.startMissedScan(limit:min(30,max(1,count)))
+            }}
             // Explicit developer launch after authorization; normal launches
             // never submit. Default five, explicit bounded limit, retain repeat guards.
             if !isUITest,ProcessInfo.processInfo.arguments.contains("--real-speed-batch"){Task{
@@ -303,7 +311,11 @@ import LineDrawCore
     #endif
     func startMissedScan(limit:Int?=nil){
         guard accepted,!locked,deviceMode,area != .demo else{return}
-        let candidates=visible.filter{$0.runnable(at:now)}
+        var candidates=visible.filter{$0.runnable(at:now)}
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--scan-submitted-only"){let scoped=records;candidates=candidates.filter{scoped[$0.activityKey]?.status=="SUBMITTED"}}
+        if ProcessInfo.processInfo.arguments.contains("--missed-scan"),let raw=ProcessInfo.processInfo.arguments.first(where:{$0.hasPrefix("--scan-offset=")}),let offset=Int(raw.dropFirst("--scan-offset=".count)){candidates=Array(candidates.dropFirst(max(0,offset)))}
+        #endif
         let rows=limit.map{Array(candidates.prefix(max(0,$0)))} ?? candidates
         guard !rows.isEmpty else{notice="目前篩選沒有可檢查的有效活動。";return}
         busy=true;missedScanRunning=true;missedFindings=[];missedScanIndex=0;missedScanTotal=rows.count;missedScanSummary="準備掃描…"
@@ -315,7 +327,7 @@ import LineDrawCore
             let started=ProcessInfo.processInfo.systemUptime
             @MainActor func report(_ status:String){
                 guard ProcessInfo.processInfo.arguments.contains("--missed-scan") else{return}
-                let body:[String:Any]=["status":status,"summary":missedScanSummary,"index":missedScanIndex,"total":missedScanTotal,"elapsed":ProcessInfo.processInfo.systemUptime-started,"items":missedFindings.map{["product":$0.product,"store":$0.store,"status":$0.status,"totalSeconds":$0.totalSeconds,"openSeconds":$0.openSeconds,"querySeconds":$0.querySeconds,"decisionSeconds":$0.decisionSeconds,"reads":$0.reads] as [String:Any]},"requests":runtime.driver?.timings ?? [:],"phases":runtime.driver?.phaseTimings ?? [:]]
+                let body:[String:Any]=["catalog":catalogSource.rawValue,"candidateKeys":rows.map(\.activityKey),"status":status,"summary":missedScanSummary,"index":missedScanIndex,"total":missedScanTotal,"elapsed":ProcessInfo.processInfo.systemUptime-started,"items":missedFindings.map{["activityKey":$0.activityKey,"product":$0.product,"store":$0.store,"status":$0.status,"totalSeconds":$0.totalSeconds,"openSeconds":$0.openSeconds,"querySeconds":$0.querySeconds,"decisionSeconds":$0.decisionSeconds,"reads":$0.reads] as [String:Any]},"requests":runtime.driver?.timings ?? [:],"phases":runtime.driver?.phaseTimings ?? [:]]
                 let file=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("missed-scan.json")
                 if let bytes=try? JSONSerialization.data(withJSONObject:body,options:[.prettyPrinted,.sortedKeys]){try? bytes.write(to:file,options:.atomic)}
             }
@@ -330,6 +342,7 @@ import LineDrawCore
                 }
                 // Navigation uses the same gate as taps; the scanner itself has no tap path.
                 driver.scanLookupMode=data.settings.scanLookupMode ?? "xml"
+                driver.batchLookupMode=data.settings.batchLookupMode ?? "standard"
                 driver.canAct={!Task.isCancelled}
                 let began=ProcessInfo.processInfo.systemUptime
                 let scanner=MissedDrawScanner(driver:driver){[weak self] index,total,finding in
@@ -484,7 +497,7 @@ import LineDrawCore
                     var value:[String:Any]=["operation":a.operation,"attempt":a.attempt,"seconds":a.seconds,"timedOut":a.timedOut]
                     if let code=a.errorCode{value["errorCode"]=code};return value
                 } ?? []
-                let body:[String:Any]=["schema":4,"fixtureCount":fixtureCount,"durable":durable,"build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","phase":phase,"runtimeCode":runtime.lastCode,"cancellationSource":status=="cancelled" ? runtime.cancellationSource:"none","faultMode":faultMode,"faultInjected":faultInjected,"inFlightOperation":runtime.driver?.inFlightOperation ?? "none","coldSafari":args.contains("--cold-fixture"),"requestAttempts":attempts,"fixtureRequests":fixture.requests,"status":status,"details":details,"elapsed":Date().timeIntervalSince(began),"startupSeconds":startupSeconds,"queueSeconds":queueSeconds,"completed":records.values.filter{$0.status=="SUBMITTED"}.count,"statuses":records.values.map(\.status),"acknowledged":fixture.acknowledged.sorted(),"acknowledgementCounts":fixture.acknowledgementCounts,"stages":stages,"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"foregroundBundles":runtime.driver?.foregroundBundles ?? [:],"items":measuredBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"manualWait":$0.manualWait,"status":$0.status] as [String:Any]} ?? [],"time":WireJSON.date(Date())]
+                let body:[String:Any]=["schema":4,"legacyRunnerSimulation":args.contains("--fixture-legacy-runner"),"fixtureCount":fixtureCount,"durable":durable,"build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown","phase":phase,"runtimeCode":runtime.lastCode,"cancellationSource":status=="cancelled" ? runtime.cancellationSource:"none","faultMode":faultMode,"faultInjected":faultInjected,"inFlightOperation":runtime.driver?.inFlightOperation ?? "none","coldSafari":args.contains("--cold-fixture"),"requestAttempts":attempts,"fixtureRequests":fixture.requests,"status":status,"details":details,"elapsed":Date().timeIntervalSince(began),"startupSeconds":startupSeconds,"queueSeconds":queueSeconds,"completed":records.values.filter{$0.status=="SUBMITTED"}.count,"statuses":records.values.map(\.status),"acknowledged":fixture.acknowledged.sorted(),"acknowledgementCounts":fixture.acknowledgementCounts,"stages":stages,"wdaTimings":runtime.driver?.timings ?? [:],"lookupMode":runtime.driver?.lookupMode ?? "stopped","phaseTimings":runtime.driver?.phaseTimings ?? [:],"navigationCounts":runtime.driver?.navigationCounts ?? [:],"foregroundBundles":runtime.driver?.foregroundBundles ?? [:],"items":measuredBatch?.itemTimings.map{["index":$0.index,"total":$0.total,"open":$0.open,"read":$0.read,"reads":$0.reads,"tap":$0.tap,"save":$0.save,"manualWait":$0.manualWait,"status":$0.status] as [String:Any]} ?? [],"time":WireJSON.date(Date())]
                 if let bytes=try? JSONSerialization.data(withJSONObject:body,options:.prettyPrinted){try? bytes.write(to:report,options:.atomic)}
             }
             save("running")
@@ -496,6 +509,7 @@ import LineDrawCore
                 phase="startingRunner";save("running")
                 let driver=try await runtime.start{if stages.last != $0{stages.append($0);save("running")};self.deviceStage=$0}
                 driver.expectedBundle="com.apple.mobilesafari";driver.fixtureBaseURL=fixtureURL
+                driver.batchLookupMode=data.settings.batchLookupMode ?? "standard"
                 driver.onDiagnosticChange={save("running")}
                 if faultMode != "none" {
                     // Debug-only, Safari loopback fixture, after first navigation.

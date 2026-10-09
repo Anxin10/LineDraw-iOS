@@ -68,6 +68,16 @@ Debug `--tap-foreground-guard` 在 Runner 明確回報支援後，將預期 bund
 
 核心 145 項測試，3 略過、0 失敗；App Debug 編譯安裝成功。目標未完成：需新可抽活動驗證真實送出低於 3 秒與長批次；目前 AX／Runner 核對仍透過明確 Debug 實驗旗標啟用。
 
+## 1.1.11（34）：一般啟動可選用的實驗模式
+
+設定 → 手機抽選查詢 → 抽選畫面查詢 →「直接 AX（實驗）」。漏抽掃描查詢也新增同名選項。一般啟動讀取保存的設定，不需要 Debug 快速路徑參數；既有模式維持原樣，使用者可切回「精簡決策查詢」或「相容查詢」。App 內版本修正紀錄與四個專案組態同步更新為 1.1.11（34）。
+
+Runner 未回報 AX snapshotMode 時採用實際回傳的既有快照，停止本工作階段的 AX 要求，診斷記錄 axUnsupportedFallback 與 standard 模式，不冒稱 AX 測速。前景核對能力未回報時恢復 App 的独立 activeAppInfo 查詢；缺少 compact 端點仍採原有相容路徑。真正的查詢逾時仍停止，不在未確認的傳輸後重試。
+
+不帶 --snapshot-ax／--tap-foreground-guard 的儲存設定實機耐久測試：二十筆 passed、佇列 38.07 秒，每筆 1.58–2.63 秒、二十筆 acknowledgement 各一次，lookupMode=batch:compact:ax。模擬舊 Runner 缺少能力欄位（不是實際舊 Runner 安裝）五筆 passed、10.89 秒、各一次 acknowledgement、lookupMode=batch:compact:standard、回退一次及五次獨立前景核對。Release 編譯通過，已簽署 Release 曾在手機正常安裝啟動；後續唯讀稽核使用 Debug 診斷版本，資料與設定保留。
+
+使用者確認沒有新的可抽活動，改做唯讀漏抽稽核。首批二十筆本機 SUBMITTED 活動，LINE 均確認 COMPLETE，漏抽 0、未知 0，約 40.77 秒。這僅代表首批，不能推論整份清單沒有漏抽。Debug 稽核新增 bounded scan-limit、scan-offset、scan-submitted-only，私有報告保存本批活動鍵值供位置核對；參加紀錄不會改寫，也沒有點擊路徑。
+
 ## 驗證與下一步
 
 Runner 與 App Debug 編譯成功、Runner 簽章驗證成功；核心 142 項測試、3 略過、0 失敗。正式預設仍使用原路徑。直接 AX 需完成正常可抽頁的完整流程、警告／換頁／不確定結果防重送驗證，才考慮正式啟用。
