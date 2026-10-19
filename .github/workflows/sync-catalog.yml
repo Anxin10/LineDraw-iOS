@@ -1,10 +1,7 @@
 name: Sync Catalog
 
 on:
-  schedule:
-    # Run every 6 hours automatically
-    - cron: '0 */6 * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  workflow_dispatch: # Manual trigger only; automatic schedule disabled
 
 permissions:
   contents: write
